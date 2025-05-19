@@ -1,0 +1,13 @@
+[settings]
+# 使用 requirements.txt 作为依赖源
+requirements-file = "requirements.txt"
+
+# 开发依赖
+dev-requirements-file = "requirements-dev.txt"
+
+# 虚拟环境配置
+venv-location = ".venv"
+venv-auto-create = true
+
+# 缓存配置
+cache-dir = ".uv/cache"
