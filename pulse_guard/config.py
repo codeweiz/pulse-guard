@@ -3,7 +3,7 @@
 """
 import os
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import List
 
 import tomli
 from dotenv import load_dotenv

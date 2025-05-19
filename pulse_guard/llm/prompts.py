@@ -3,7 +3,6 @@ LLM 提示模板模块。
 """
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-
 # 代码审查系统提示
 CODE_REVIEW_SYSTEM_PROMPT = """你是一个专业的代码审查助手，负责分析代码质量并提供改进建议。
 

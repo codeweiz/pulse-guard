@@ -3,8 +3,8 @@
 Celery worker 启动脚本。
 """
 import sys
+
 from pulse_guard.worker.celery_app import celery_app
-import pulse_guard.worker.tasks  # 显式导入任务模块
 
 if __name__ == "__main__":
     # 检查命令行参数，如果没有 'worker' 参数，则添加

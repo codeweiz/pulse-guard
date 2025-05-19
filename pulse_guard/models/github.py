@@ -1,11 +1,11 @@
 """
 GitHub 相关的数据模型。
 """
-from datetime import datetime
 import logging
-from typing import List, Optional, Dict, Any, Union, Any
+from datetime import datetime
+from typing import Optional, Dict, Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, field_validator
 
 # 配置日志
 logger = logging.getLogger(__name__)

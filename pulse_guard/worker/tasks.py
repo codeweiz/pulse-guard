@@ -21,6 +21,9 @@ def process_pull_request(self, repo: str, pr_number: int) -> Dict[str, Any]:
 
     Returns:
         处理结果
+        :param pr_number: PR 编号
+        :param repo: 仓库
+        :param self: 自身
     """
     try:
         logger.info(f"Processing PR #{pr_number} from {repo}")

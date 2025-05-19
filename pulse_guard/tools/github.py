@@ -3,7 +3,6 @@ GitHub 相关的工具函数。
 """
 import base64
 import hmac
-import json
 import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional
@@ -139,7 +138,7 @@ class GitHubClient:
         return response.json()
 
     def create_pull_request_review(
-        self, repo: str, pr_number: int, commit_id: str, body: str, comments: List[ReviewComment]
+            self, repo: str, pr_number: int, commit_id: str, body: str, comments: List[ReviewComment]
     ) -> Dict[str, Any]:
         """创建 Pull Request 审查
 

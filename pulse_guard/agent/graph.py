@@ -1,11 +1,10 @@
 """
 LangGraph 代码审查 Agent 实现。
 """
-from typing import TypedDict, List, Dict, Any, Annotated, Sequence, Union, Optional
+from typing import TypedDict, List, Dict, Any, Union, Optional
 
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolNode, tools_condition
 
 from pulse_guard.config import config
 from pulse_guard.llm.client import get_llm
@@ -64,7 +63,8 @@ def get_file_contents(state: AgentState) -> AgentState:
     for file in files:
         if file["filename"] not in file_contents and file["status"] != "removed":
             try:
-                content = get_file_content.invoke(input=f"{pr_info['repo_full_name']}|{file['filename']}|{pr_info['head_sha']}")
+                content = get_file_content.invoke(
+                    input=f"{pr_info['repo_full_name']}|{file['filename']}|{pr_info['head_sha']}")
                 file_contents[file["filename"]] = content
             except Exception as e:
                 # 如果获取文件内容失败，记录错误

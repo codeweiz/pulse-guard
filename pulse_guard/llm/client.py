@@ -10,10 +10,10 @@ from pulse_guard.config import config
 
 
 def get_llm(
-    provider: Optional[str] = None,
-    model_name: Optional[str] = None,
-    api_key: Optional[str] = None,
-    **kwargs
+        provider: Optional[str] = None,
+        model_name: Optional[str] = None,
+        api_key: Optional[str] = None,
+        **kwargs
 ) -> BaseChatModel:
     """获取 LLM 客户端
 
