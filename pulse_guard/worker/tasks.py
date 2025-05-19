@@ -12,15 +12,17 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task(bind=True, max_retries=3, name="pulse_guard.worker.tasks.process_pull_request")
-def process_pull_request(self, repo: str, pr_number: int) -> Dict[str, Any]:
+def process_pull_request(self, repo: str, pr_number: int, platform: str = "github") -> Dict[str, Any]:
     """处理 Pull Request
 
     Args:
         repo: 仓库名称，格式为 "owner/repo"
         pr_number: Pull Request 编号
+        platform: 平台名称，"github" 或 "gitee"
 
     Returns:
         处理结果
+        :param platform: 平台名称
         :param pr_number: PR 编号
         :param repo: 仓库
         :param self: 自身
@@ -31,7 +33,8 @@ def process_pull_request(self, repo: str, pr_number: int) -> Dict[str, Any]:
         # 运行代码审查
         result = run_code_review({
             "repo": repo,
-            "number": pr_number
+            "number": pr_number,
+            "platform": platform
         })
 
         logger.info(f"Completed review for PR #{pr_number} from {repo}")
@@ -39,6 +42,7 @@ def process_pull_request(self, repo: str, pr_number: int) -> Dict[str, Any]:
             "status": "success",
             "pr_number": pr_number,
             "repo": repo,
+            "platform": platform,
             "file_count": len(result.get("file_reviews", [])),
             "issue_count": sum(len(review.get("issues", [])) for review in result.get("file_reviews", []))
         }
@@ -50,5 +54,6 @@ def process_pull_request(self, repo: str, pr_number: int) -> Dict[str, Any]:
             "status": "error",
             "pr_number": pr_number,
             "repo": repo,
+            "platform": platform,
             "error": str(e)
         }

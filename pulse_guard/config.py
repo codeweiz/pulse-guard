@@ -20,7 +20,7 @@ try:
     with open(ROOT_DIR / "config.toml", "rb") as f:
         toml_config = tomli.load(f)
 except FileNotFoundError:
-    toml_config = {"llm": {}, "github": {}, "review": {}}
+    toml_config = {"llm": {}, "github": {}, "gitee": {}, "review": {}}
 
 
 class LLMConfig(BaseModel):
@@ -83,10 +83,35 @@ class RedisConfig(BaseModel):
     )
 
 
+class GiteeConfig(BaseModel):
+    """Gitee 配置"""
+    api_base_url: str = Field(
+        default=toml_config.get("gitee", {}).get("api_base_url", "https://gitee.com/api/v5"),
+        description="Gitee API 基础 URL"
+    )
+    access_token: str = Field(
+        default=os.getenv("GITEE_ACCESS_TOKEN", ""),
+        description="Gitee API 访问令牌"
+    )
+    webhook_secret: str = Field(
+        default=os.getenv("GITEE_WEBHOOK_SECRET", ""),
+        description="Gitee Webhook 密钥"
+    )
+    verify_webhook_signature: bool = Field(
+        default=toml_config.get("gitee", {}).get("verify_webhook_signature", False),
+        description="是否验证 Webhook 签名"
+    )
+    development_mode: bool = Field(
+        default=toml_config.get("gitee", {}).get("development_mode", True),
+        description="开发模式，在该模式下将宽松处理 webhook 请求"
+    )
+
+
 class Config(BaseModel):
     """应用配置"""
     llm: LLMConfig = Field(default_factory=LLMConfig)
     github: GitHubConfig = Field(default_factory=GitHubConfig)
+    gitee: GiteeConfig = Field(default_factory=GiteeConfig)
     review: ReviewConfig = Field(default_factory=ReviewConfig)
     redis: RedisConfig = Field(default_factory=RedisConfig)
 
