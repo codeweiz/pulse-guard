@@ -78,16 +78,11 @@ async def handle_webhook(request: Request) -> JSONResponse | dict[str, str | Non
 
     except Exception as e:
         logger.error(f"Error processing webhook: {str(e)}")
-        if config.github.development_mode:
-            # 在开发模式下，返回详细错误信息
-            return JSONResponse(
-                content={
-                    "status": "error",
-                    "message": f"Error processing webhook: {str(e)}",
-                    "headers": headers
-                },
-                status_code=500
-            )
-        else:
-            # 在生产模式下，返回简单错误
-            raise HTTPException(status_code=500, detail="Error processing webhook")
+        return JSONResponse(
+            content={
+                "status": "error",
+                "message": f"Error processing webhook: {str(e)}",
+                "headers": headers
+            },
+            status_code=500
+        )

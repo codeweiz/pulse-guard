@@ -90,19 +90,6 @@ class PlatformProvider(ABC):
         """
         pass
 
-    @abstractmethod
-    def verify_webhook_signature(self, payload: bytes, signature: str) -> bool:
-        """验证 Webhook 签名
-        
-        Args:
-            payload: 请求体字节数据
-            signature: 签名字符串
-            
-        Returns:
-            是否验证通过
-        """
-        pass
-
     def get_platform_name(self) -> str:
         """获取平台名称
         

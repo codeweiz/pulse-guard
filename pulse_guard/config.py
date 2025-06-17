@@ -53,14 +53,6 @@ class GitHubConfig(BaseModel):
         default=os.getenv("WEBHOOK_SECRET", ""),
         description="Webhook 密钥"
     )
-    verify_webhook_signature: bool = Field(
-        default=toml_config.get("github", {}).get("verify_webhook_signature", False),
-        description="是否验证 Webhook 签名"
-    )
-    development_mode: bool = Field(
-        default=toml_config.get("github", {}).get("development_mode", True),
-        description="开发模式，在该模式下将宽松处理 webhook 请求"
-    )
 
 
 class ReviewConfig(BaseModel):
@@ -96,14 +88,6 @@ class GiteeConfig(BaseModel):
     webhook_secret: str = Field(
         default=os.getenv("GITEE_WEBHOOK_SECRET", ""),
         description="Gitee Webhook 密钥"
-    )
-    verify_webhook_signature: bool = Field(
-        default=toml_config.get("gitee", {}).get("verify_webhook_signature", False),
-        description="是否验证 Webhook 签名"
-    )
-    development_mode: bool = Field(
-        default=toml_config.get("gitee", {}).get("development_mode", True),
-        description="开发模式，在该模式下将宽松处理 webhook 请求"
     )
 
 

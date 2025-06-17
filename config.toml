@@ -4,13 +4,9 @@ model_name = "deepseek-chat"
 
 [github]
 api_base_url = "https://api.github.com"
-verify_webhook_signature = false  # 开发环境中禁用签名验证
-development_mode = true          # 开发模式，宽松处理 webhook 请求
 
 [gitee]
 api_base_url = "https://gitee.com/api/v5"
-verify_webhook_signature = false  # 开发环境中禁用签名验证
-development_mode = true          # 开发模式，宽松处理 webhook 请求
 
 [review]
 types = ["code_quality", "security", "best_practices"]
