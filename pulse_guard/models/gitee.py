@@ -29,13 +29,47 @@ class GiteeUser(BaseModel):
 class GiteeFile(BaseModel):
     """Gitee 文件模型"""
     filename: str
-    status: str  # added, modified, removed
-    additions: int
-    deletions: int
-    changes: int
-    patch: Optional[str] = None
+    status: Optional[str] = None  # 可能为 None，added, modified, removed
+    additions: int = 0
+    deletions: int = 0
+    changes: Optional[int] = None  # 可能不存在，需要计算
+    patch: Optional[Any] = None  # 可能是字符串或字典格式
     blob_url: Optional[str] = None
     raw_url: Optional[str] = None
+
+    @field_validator('status')
+    @classmethod
+    def validate_status(cls, v):
+        """验证并修复 status 字段"""
+        if v is None:
+            return "modified"  # 默认值
+        return v
+
+    @field_validator('changes')
+    @classmethod
+    def validate_changes(cls, v, info):
+        """验证并计算 changes 字段"""
+        if v is None:
+            # 如果 changes 为 None，从 additions 和 deletions 计算
+            data = info.data
+            additions = data.get('additions', 0)
+            deletions = data.get('deletions', 0)
+            return additions + deletions
+        return v
+
+    @field_validator('patch')
+    @classmethod
+    def validate_patch(cls, v):
+        """验证并处理 patch 字段"""
+        if isinstance(v, dict):
+            # 如果是字典，尝试提取 diff 字段
+            return v.get('diff')
+        elif isinstance(v, str):
+            # 如果是字符串，直接返回
+            return v
+        else:
+            # 其他情况返回 None
+            return None
 
 
 class PullRequest(BaseModel):

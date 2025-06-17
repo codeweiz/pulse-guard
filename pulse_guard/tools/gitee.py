@@ -87,7 +87,20 @@ class GiteeClient:
         response = self._make_request("GET", f"/repos/{repo}/pulls/{pr_number}/files")
         files_data = response.json()
 
-        return [GiteeFile(**file_data) for file_data in files_data]
+        processed_files = []
+        for file_data in files_data:
+            # 记录原始数据用于调试
+            logger.debug(f"Processing file data: {file_data}")
+
+            try:
+                # 现在 GiteeFile 模型可以自动处理数据验证和转换
+                processed_files.append(GiteeFile(**file_data))
+            except Exception as e:
+                logger.error(f"Error creating GiteeFile from data {file_data}: {str(e)}")
+                # 跳过有问题的文件，继续处理其他文件
+                continue
+
+        return processed_files
 
     def get_file_content(self, repo: str, file_path: str, ref: str) -> str:
         """获取文件内容
