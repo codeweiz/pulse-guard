@@ -4,7 +4,7 @@ API 路由定义模块。
 from fastapi import APIRouter, Request
 
 from pulse_guard.api.gitee_webhook import handle_webhook as handle_gitee_webhook
-from pulse_guard.api.webhook import handle_webhook
+from pulse_guard.api.github_webhook import handle_webhook as handle_github_webhook
 from pulse_guard.worker.tasks import process_pull_request
 
 # 创建路由器
@@ -14,7 +14,7 @@ router = APIRouter()
 @router.post("/webhook/github")
 async def github_webhook(request: Request):
     """GitHub Webhook 端点"""
-    return await handle_webhook(request)
+    return await handle_github_webhook(request)
 
 
 @router.post("/webhook/gitee")

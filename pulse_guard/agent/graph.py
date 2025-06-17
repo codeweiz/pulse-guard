@@ -9,8 +9,7 @@ from langgraph.graph import StateGraph, END
 from pulse_guard.config import config
 from pulse_guard.llm.client import get_llm
 from pulse_guard.models.review import PRReview, FileReview, CodeIssue, SeverityLevel, IssueCategory
-from pulse_guard.tools.github import get_pr_info, get_pr_files, get_file_content, post_pr_comment
-from pulse_guard.tools.gitee import get_gitee_pr_info, get_gitee_pr_files, get_gitee_file_content, post_gitee_pr_comment
+from pulse_guard.platforms import get_platform_provider
 
 
 # 定义 Agent 状态类型
@@ -31,15 +30,14 @@ def analyze_pr(state: AgentState) -> AgentState:
     pr_info = state["pr_info"]
     platform = pr_info.get("platform", "github")
 
+    # 获取平台提供者
+    provider = get_platform_provider(platform)
+
     # 获取 PR 详细信息
-    if platform == "gitee":
-        pr_details = get_gitee_pr_info.invoke(input=f"{pr_info['repo']}|{pr_info['number']}")
-        # 获取 PR 修改的文件列表
-        files = get_gitee_pr_files.invoke(input=f"{pr_info['repo']}|{pr_info['number']}")
-    else:  # 默认为 GitHub
-        pr_details = get_pr_info.invoke(input=f"{pr_info['repo']}|{pr_info['number']}")
-        # 获取 PR 修改的文件列表
-        files = get_pr_files.invoke(input=f"{pr_info['repo']}|{pr_info['number']}")
+    pr_details = provider.get_pr_info(pr_info['repo'], pr_info['number'])
+
+    # 获取 PR 修改的文件列表
+    files = provider.get_pr_files(pr_info['repo'], pr_info['number'])
 
     # 限制文件数量
     max_files = config.review.max_files_per_review
@@ -66,16 +64,18 @@ def get_file_contents(state: AgentState) -> AgentState:
     files = state["files"]
     file_contents = state["file_contents"].copy()
 
+    # 获取平台提供者
+    provider = get_platform_provider(platform)
+
     # 获取所有文件的内容
     for file in files:
         if file["filename"] not in file_contents and file["status"] != "removed":
             try:
-                if platform == "gitee":
-                    content = get_gitee_file_content.invoke(
-                        input=f"{pr_info['repo_full_name']}|{file['filename']}|{pr_info['head_sha']}")
-                else:  # 默认为 GitHub
-                    content = get_file_content.invoke(
-                        input=f"{pr_info['repo_full_name']}|{file['filename']}|{pr_info['head_sha']}")
+                content = provider.get_file_content(
+                    pr_info['repo_full_name'],
+                    file['filename'],
+                    pr_info['head_sha']
+                )
                 file_contents[file["filename"]] = content
             except Exception as e:
                 # 如果获取文件内容失败，记录错误
@@ -385,11 +385,9 @@ def post_review_comment(state: AgentState) -> AgentState:
     # 格式化评论
     comment = pr_review.format_comment()
 
-    # 发布评论
-    if platform == "gitee":
-        post_gitee_pr_comment.invoke(input=f"{pr_info['repo_full_name']}|{pr_info['number']}|{comment}")
-    else:  # 默认为 GitHub
-        post_pr_comment.invoke(input=f"{pr_info['repo_full_name']}|{pr_info['number']}|{comment}")
+    # 获取平台提供者并发布评论
+    provider = get_platform_provider(platform)
+    provider.post_pr_comment(pr_info['repo_full_name'], pr_info['number'], comment)
 
     # 更新状态
     return {**state, "comment": comment}

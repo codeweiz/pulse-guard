@@ -2,10 +2,10 @@
 GitHub Webhook 处理模块。
 """
 import logging
-from typing import Dict, Any
+from typing import Any
 
 from fastapi import Request, HTTPException
-from fastapi.responses import JSONResponse
+from starlette.responses import JSONResponse
 
 from pulse_guard.config import config
 from pulse_guard.worker.tasks import process_pull_request
@@ -14,7 +14,7 @@ from pulse_guard.worker.tasks import process_pull_request
 logger = logging.getLogger(__name__)
 
 
-async def handle_webhook(request: Request) -> Dict[str, Any]:
+async def handle_webhook(request: Request) -> JSONResponse | dict[str, str | None | Any]:
     """处理 GitHub Webhook 请求
 
     Args:
