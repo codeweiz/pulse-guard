@@ -1,6 +1,11 @@
 [llm]
-provider = "deepseek"
-model_name = "deepseek-chat"
+#provider = "deepseek"
+#model_name = "deepseek-chat"
+#base_url = ""
+
+provider = "ollama"
+model_name = "deepseek-r1:32b"
+base_url = "http://192.168.220.15:11434"
 
 [github]
 api_base_url = "https://api.github.com"

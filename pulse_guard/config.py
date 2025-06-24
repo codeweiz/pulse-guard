@@ -33,6 +33,10 @@ class LLMConfig(BaseModel):
         default=toml_config.get("llm", {}).get("model_name", "deepseek-coder"),
         description="LLM 模型名称"
     )
+    base_url: str = Field(
+        default=toml_config.get("llm", {}).get("base_url", "http://192.168.220.15:11434"),
+        description="基础 URL"
+    )
     api_key: str = Field(
         default=os.getenv("DEEPSEEK_API_KEY", os.getenv("OPENAI_API_KEY", "")),
         description="LLM API 密钥"
