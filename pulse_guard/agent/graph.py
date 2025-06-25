@@ -342,7 +342,7 @@ def generate_summary(state: AgentState) -> AgentState:
 {file_reviews_text}
 
 请在总结中包括:
-1. PR 的整体质量评价
+1. PR 的整体质量评价，从 0 到 10 分给 PR 评分
 2. 主要问题和模式
 3. 关键改进建议
 4. 积极的反馈和鼓励
