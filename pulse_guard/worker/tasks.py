@@ -30,7 +30,7 @@ def process_pull_request(self, repo: str, pr_number: int, platform: str = "githu
     try:
         logger.info(f"Processing PR #{pr_number} from {repo}")
 
-        # 运行代码审查
+        # 运行代码审查 - 使用简化工作流
         result = run_code_review({
             "repo": repo,
             "number": pr_number,
@@ -38,13 +38,32 @@ def process_pull_request(self, repo: str, pr_number: int, platform: str = "githu
         })
 
         logger.info(f"Completed review for PR #{pr_number} from {repo}")
+
+        # 安全地获取文件审查结果
+        file_reviews = result.get("file_reviews", [])
+        if not file_reviews:
+            # 如果没有 file_reviews，尝试从 enhanced_analysis 中获取
+            enhanced_analysis = result.get("enhanced_analysis", {})
+            if enhanced_analysis and enhanced_analysis.get("file_results"):
+                file_reviews = enhanced_analysis["file_results"]
+
+        # 计算文件数量和问题数量
+        file_count = len(file_reviews) if file_reviews else 0
+        issue_count = 0
+        if file_reviews:
+            for review in file_reviews:
+                if isinstance(review, dict):
+                    issues = review.get("issues", [])
+                    if isinstance(issues, list):
+                        issue_count += len(issues)
+
         return {
             "status": "success",
             "pr_number": pr_number,
             "repo": repo,
             "platform": platform,
-            "file_count": len(result.get("file_reviews", [])),
-            "issue_count": sum(len(review.get("issues", [])) for review in result.get("file_reviews", []))
+            "file_count": file_count,
+            "issue_count": issue_count
         }
     except Exception as e:
         logger.error(f"Error processing PR #{pr_number} from {repo}: {str(e)}")

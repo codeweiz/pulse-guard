@@ -23,6 +23,3 @@ celery_app.conf.update(
 
 # 自动发现任务
 celery_app.autodiscover_tasks(["pulse_guard.worker"])
-
-# 导入任务模块
-import pulse_guard.worker.tasks
