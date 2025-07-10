@@ -37,7 +37,7 @@ class LLMConfig(BaseModel):
         description="基础 URL"
     )
     api_key: str = Field(
-        default=os.getenv("DEEPSEEK_API_KEY", os.getenv("OPENAI_API_KEY", "")),
+        default=os.getenv("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY", "")),
         description="LLM API 密钥"
     )
 
@@ -55,14 +55,6 @@ class GitHubConfig(BaseModel):
     webhook_secret: str = Field(
         default=os.getenv("WEBHOOK_SECRET", ""),
         description="Webhook 密钥"
-    )
-
-
-class ReviewConfig(BaseModel):
-    """代码审查配置"""
-    max_concurrent_reviews: int = Field(
-        default=toml_config.get("review", {}).get("max_concurrent_reviews", 8),
-        description="最大并发审查数量"
     )
 
 
@@ -107,7 +99,6 @@ class Config(BaseModel):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     github: GitHubConfig = Field(default_factory=GitHubConfig)
     gitee: GiteeConfig = Field(default_factory=GiteeConfig)
-    review: ReviewConfig = Field(default_factory=ReviewConfig)
     redis: RedisConfig = Field(default_factory=RedisConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
 
