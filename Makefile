@@ -1,8 +1,5 @@
 .PHONY: install dev clean lint test run worker docker-build docker-up docker-down
 
-# 默认目标
-all: install
-
 # 安装依赖
 install:
 	uv sync
@@ -58,11 +55,3 @@ docker-down:
 
 docker-logs:
 	docker-compose logs -f
-
-# 初始化数据库
-init-db:
-	uv run python scripts/init_db.py
-
-# 运行演示
-demo:
-	uv run python scripts/demo_review.py

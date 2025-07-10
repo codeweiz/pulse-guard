@@ -1,6 +1,7 @@
 """
 LangGraph 代码审查 Agent 实现。
 """
+import asyncio
 import logging
 from typing import TypedDict, List, Dict, Any, Union, Optional
 
@@ -8,7 +9,6 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph import StateGraph, END
 
 from pulse_guard.agent.data_validator import data_validator
-from pulse_guard.config import config
 from pulse_guard.llm.client import get_llm
 from pulse_guard.models.review import PRReview, FileReview, CodeIssue, SeverityLevel, IssueCategory
 from pulse_guard.platforms import get_platform_provider
@@ -153,10 +153,8 @@ def fetch_pr_and_code_files(state: AgentState) -> AgentState:
     }
 
 
-def intelligent_code_review(state: AgentState) -> AgentState:
+async def intelligent_code_review(state: AgentState) -> AgentState:
     """智能代码审查 - 按文件并发调用LLM"""
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
     pr_info = state["pr_info"]
     files = state["files"]
 
@@ -181,33 +179,32 @@ def intelligent_code_review(state: AgentState) -> AgentState:
     # 并发审查每个文件
     file_reviews = []
     try:
-        # 使用线程池并发处理文件 - 使用配置的并发数量
-        max_workers = min(len(files), config.review.max_concurrent_reviews)
-        logger.info(f"使用 {max_workers} 个并发工作线程")
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # 提交所有文件审查任务
-            future_to_file = {
-                executor.submit(_review_single_file, file, pr_info): file
-                for file in files
-            }
+        logger.info(f"使用 asyncio.gather 并发处理 {len(files)} 个文件")
 
-            # 收集结果
-            for future in as_completed(future_to_file):
-                file = future_to_file[future]
-                try:
-                    file_review = future.result()
-                    file_reviews.append(file_review)
-                    logger.info(f"文件 {file['filename']} 审查完成")
-                except Exception as e:
-                    logger.error(f"文件 {file['filename']} 审查失败: {e}")
-                    # 添加失败的默认结果
-                    file_reviews.append({
-                        'filename': file['filename'],
-                        'score': 70,
-                        'issues': [{'type': 'error', 'title': '审查失败', 'description': str(e)}],
-                        'positive_points': [],
-                        'summary': f'审查失败: {str(e)}'
-                    })
+        # 创建所有文件审查任务
+        tasks = []
+        for file in files:
+            task = _review_single_file_async(file, pr_info)
+            tasks.append(task)
+
+        # 等待所有任务完成
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # 处理结果
+        for i, (file, result) in enumerate(zip(files, results)):
+            if isinstance(result, Exception):
+                logger.error(f"文件 {file['filename']} 审查异常: {result}")
+                # 添加失败的默认结果
+                file_reviews.append({
+                    'filename': file['filename'],
+                    'score': 70,
+                    'issues': [{'type': 'error', 'title': '审查失败', 'description': str(result)}],
+                    'positive_points': [],
+                    'summary': f'审查失败: {str(result)}'
+                })
+            else:
+                file_reviews.append(result)
+                logger.info(f"文件 {file['filename']} 审查完成")
 
         # 计算总体评分
         overall_result = _calculate_overall_scores(file_reviews)
@@ -445,8 +442,36 @@ def build_code_review_graph():
 
 
 # 运行代码审查
+async def _review_single_file_async(file: Dict[str, Any], pr_info: Dict[str, Any]) -> Dict[str, Any]:
+    """异步审查单个文件"""
+    try:
+        llm = get_llm()
+
+        # 构建单文件审查提示
+        prompt = _build_single_file_review_prompt(file, pr_info)
+
+        # 异步调用LLM
+        response = await llm.ainvoke(prompt)
+        review_content = response.content if hasattr(response, 'content') else str(response)
+
+        # 解析单文件审查结果
+        file_review = _parse_single_file_response(review_content, file)
+
+        return file_review
+
+    except Exception as e:
+        logger.error(f"单文件审查失败 {file.get('filename', 'unknown')}: {e}")
+        return {
+            'filename': file.get('filename', 'unknown'),
+            'score': 70,
+            'issues': [{'type': 'error', 'title': '审查异常', 'description': str(e)}],
+            'positive_points': [],
+            'summary': f'审查异常: {str(e)}'
+        }
+
+
 def _review_single_file(file: Dict[str, Any], pr_info: Dict[str, Any]) -> Dict[str, Any]:
-    """审查单个文件"""
+    """审查单个文件 - 保留同步版本用于向后兼容"""
     try:
         llm = get_llm()
 
@@ -873,12 +898,11 @@ def _fallback_simple_review(state: AgentState) -> AgentState:
     }
 
 
-def run_code_review(pr_info: Dict[str, Any]) -> Dict[str, Any]:
-    """运行代码审查
+async def run_code_review_async(pr_info: Dict[str, Any]) -> Dict[str, Any]:
+    """异步运行代码审查
 
     Args:
         pr_info: PR 信息，包含 repo 和 number
-        use_simplified_workflow: 是否使用简化工作流，默认为True
 
     Returns:
         审查结果
@@ -899,6 +923,34 @@ def run_code_review(pr_info: Dict[str, Any]) -> Dict[str, Any]:
         "db_record_id": None
     }
 
-    # 执行图
-    result = graph.invoke(initial_state)
+    # 异步执行图
+    result = await graph.ainvoke(initial_state)
     return result
+
+
+def run_code_review(pr_info: Dict[str, Any]) -> Dict[str, Any]:
+    """运行代码审查 - 同步包装器
+
+    Args:
+        pr_info: PR 信息，包含 repo 和 number
+
+    Returns:
+        审查结果
+    """
+    import asyncio
+
+    # 获取或创建事件循环
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # 如果事件循环正在运行，创建新的事件循环
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, run_code_review_async(pr_info))
+                return future.result()
+        else:
+            # 如果事件循环没有运行，直接使用
+            return loop.run_until_complete(run_code_review_async(pr_info))
+    except RuntimeError:
+        # 如果没有事件循环，创建新的
+        return asyncio.run(run_code_review_async(pr_info))
