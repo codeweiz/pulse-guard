@@ -14,5 +14,12 @@ api_base_url = "https://api.github.com"
 api_base_url = "https://gitee.com/api/v5"
 
 [review]
+# 代码审查配置
 types = ["code_quality", "security", "best_practices"]
-max_files_per_review = 10
+max_concurrent_reviews = 16
+
+[database]
+# 数据库配置
+# url = "sqlite:///./pulse_guard.db"  # SQLite
+# url = "postgresql://user:password@localhost/pulse_guard"  # PostgreSQL
+echo = true  # 是否显示 SQL 语句

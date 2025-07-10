@@ -130,6 +130,9 @@ make dev
 # 运行代码检查
 make lint
 
+# 格式化代码
+make format
+
 # 运行测试
 make test
 
@@ -139,8 +142,17 @@ make run
 # 启动 Celery Worker
 make worker
 
-# 启动 ngrok 反向代理
-make ngrok
+# Docker 相关
+make docker-build
+make docker-up
+make docker-down
+make docker-logs
+
+# 初始化数据库
+make init-db
+
+# 运行演示
+make demo
 ```
 
 ### 手动启动应用
@@ -148,11 +160,8 @@ make ngrok
 使用 uv (推荐):
 
 ```bash
-# 创建并激活虚拟环境
-uv venv
-source .venv/bin/activate  # Linux/macOS
-# 或
-# .venv\Scripts\activate  # Windows
+# 安装依赖
+uv sync
 
 # 启动 Web 服务
 uv run uvicorn pulse_guard.main:app --host 0.0.0.0 --port 8000
@@ -161,14 +170,18 @@ uv run uvicorn pulse_guard.main:app --host 0.0.0.0 --port 8000
 uv run python celery_worker.py
 ```
 
-使用传统方式:
+### Docker 部署
 
 ```bash
-# 启动 Web 服务
-uvicorn pulse_guard.main:app --host 0.0.0.0 --port 8000
+# 构建并启动所有服务
+make docker-build
+make docker-up
 
-# 启动 Celery Worker
-python celery_worker.py
+# 查看服务状态
+make docker-logs
+
+# 停止服务
+make docker-down
 ```
 
 ### 本地开发工作流程

@@ -3,7 +3,6 @@
 """
 import os
 from pathlib import Path
-from typing import List
 
 import tomli
 from dotenv import load_dotenv
@@ -61,13 +60,9 @@ class GitHubConfig(BaseModel):
 
 class ReviewConfig(BaseModel):
     """代码审查配置"""
-    types: List[str] = Field(
-        default=toml_config.get("review", {}).get("types", ["code_quality", "security", "best_practices"]),
-        description="审查类型"
-    )
-    max_files_per_review: int = Field(
-        default=toml_config.get("review", {}).get("max_files_per_review", 10),
-        description="每次审查的最大文件数"
+    max_concurrent_reviews: int = Field(
+        default=toml_config.get("review", {}).get("max_concurrent_reviews", 8),
+        description="最大并发审查数量"
     )
 
 
@@ -95,6 +90,18 @@ class GiteeConfig(BaseModel):
     )
 
 
+class DatabaseConfig(BaseModel):
+    """数据库配置"""
+    url: str = Field(
+        default=os.getenv("DATABASE_URL", "sqlite:///./pulse_guard.db"),
+        description="数据库URL"
+    )
+    echo: bool = Field(
+        default=os.getenv("DATABASE_ECHO", "false").lower() == "true",
+        description="是否显示SQL语句"
+    )
+
+
 class Config(BaseModel):
     """应用配置"""
     llm: LLMConfig = Field(default_factory=LLMConfig)
@@ -102,6 +109,7 @@ class Config(BaseModel):
     gitee: GiteeConfig = Field(default_factory=GiteeConfig)
     review: ReviewConfig = Field(default_factory=ReviewConfig)
     redis: RedisConfig = Field(default_factory=RedisConfig)
+    database: DatabaseConfig = Field(default_factory=DatabaseConfig)
 
 
 # 全局配置实例
