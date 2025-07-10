@@ -397,10 +397,10 @@ def post_review_comment(state: AgentState) -> AgentState:
         ]
     )
 
-    # 使用增强的评论内容或默认格式
+    # 生成完整的评论内容（现在可以分批发送）
     if comment_parts:
         comment_text = "\n".join(comment_parts)
-        # 添加传统的详细审查结果
+        # 添加完整的详细审查结果
         comment_text += "\n\n" + pr_review.format_comment()
     else:
         comment_text = pr_review.format_comment()
@@ -409,13 +409,150 @@ def post_review_comment(state: AgentState) -> AgentState:
     provider = get_platform_provider(platform)
 
     try:
-        provider.post_pr_comment(pr_info['repo_full_name'], pr_info['number'], comment_text)
-        print(f"✅ 已发布审查评论到 PR #{pr_info['number']}")
+        # 使用分批评论功能，根据平台设置不同的长度限制
+        max_length = 4000  # 默认限制
+        if platform == "gitee":
+            max_length = 3000  # Gitee 可能限制更严格
+        elif platform == "github":
+            max_length = 8000  # GitHub 限制相对宽松
+
+        results = provider.post_pr_comments_batch(
+            pr_info['repo_full_name'],
+            pr_info['number'],
+            comment_text,
+            max_length=max_length
+        )
+
+        # 统计发布结果
+        success_count = sum(1 for r in results if "error" not in r)
+        total_count = len(results)
+
+        if success_count == total_count:
+            print(f"✅ 已发布审查评论到 PR #{pr_info['number']} (共 {total_count} 条)")
+        else:
+            print(f"⚠️ 部分评论发布成功: {success_count}/{total_count} 条到 PR #{pr_info['number']}")
+
     except Exception as e:
         print(f"❌ 发布评论失败: {str(e)}")
+        # 如果分批发布失败，尝试发布简化版本
+        try:
+            simplified_comment = _create_fallback_comment(file_reviews, enhanced_analysis)
+            provider.post_pr_comment(pr_info['repo_full_name'], pr_info['number'], simplified_comment)
+            print(f"✅ 已发布简化评论到 PR #{pr_info['number']}")
+        except Exception as fallback_error:
+            print(f"❌ 简化评论也发布失败: {str(fallback_error)}")
 
     # 更新状态
     return {**state, "comment": comment_text}
+
+
+def _format_simplified_comment(pr_review: PRReview, file_reviews: List[Dict[str, Any]]) -> str:
+    """格式化简化的评论内容，减少长度"""
+    comment_parts = []
+
+    # 添加简化的总体评价
+    if pr_review.overall_summary:
+        comment_parts.append("## 📋 审查总结")
+        # 限制总结长度
+        summary = pr_review.overall_summary
+        if len(summary) > 500:
+            summary = summary[:500] + "..."
+        comment_parts.append(summary)
+        comment_parts.append("")
+
+    # 添加统计信息
+    total_issues = sum(len(review.get("issues", [])) for review in file_reviews)
+    critical_issues = sum(1 for review in file_reviews
+                          for issue in review.get("issues", [])
+                          if issue.get("severity") == "critical")
+
+    comment_parts.append("## 📊 审查统计")
+    comment_parts.append(f"- 📁 审查文件: **{len(file_reviews)}** 个")
+    comment_parts.append(f"- 🔍 发现问题: **{total_issues}** 个")
+    if critical_issues > 0:
+        comment_parts.append(f"- 🚨 严重问题: **{critical_issues}** 个")
+    comment_parts.append("")
+
+    # 只显示有问题的文件，并限制显示数量
+    files_with_issues = [review for review in file_reviews if review.get("issues")]
+    if files_with_issues:
+        comment_parts.append("## ⚠️ 需要关注的文件")
+
+        # 最多显示5个有问题的文件
+        for review in files_with_issues[:5]:
+            filename = review["filename"]
+            issues = review.get("issues", [])
+            issue_count = len(issues)
+
+            # 统计问题严重程度
+            critical_count = sum(1 for issue in issues if issue.get("severity") == "critical")
+            error_count = sum(1 for issue in issues if issue.get("severity") == "error")
+
+            severity_info = []
+            if critical_count > 0:
+                severity_info.append(f"🚨{critical_count}")
+            if error_count > 0:
+                severity_info.append(f"❌{error_count}")
+
+            severity_text = f" ({', '.join(severity_info)})" if severity_info else ""
+
+            comment_parts.append(f"### `{filename}`")
+            comment_parts.append(f"- 问题数量: **{issue_count}**{severity_text}")
+
+            # 只显示最严重的问题
+            if issues:
+                # 按严重程度排序
+                severity_order = {"critical": 0, "error": 1, "warning": 2, "info": 3}
+                sorted_issues = sorted(issues, key=lambda x: severity_order.get(x.get("severity", "info"), 3))
+
+                top_issue = sorted_issues[0]
+                comment_parts.append(f"- 主要问题: {top_issue.get('title', '未知问题')}")
+
+            comment_parts.append("")
+
+        # 如果有更多文件，显示提示
+        if len(files_with_issues) > 5:
+            remaining = len(files_with_issues) - 5
+            comment_parts.append(f"*还有 {remaining} 个文件存在问题，详情请查看完整报告*")
+            comment_parts.append("")
+
+    # 添加简化的建议
+    comment_parts.append("## 💡 改进建议")
+    if critical_issues > 0:
+        comment_parts.append("- 🚨 请优先修复严重问题")
+    if total_issues > 10:
+        comment_parts.append("- 📝 建议分批修复问题，避免一次性修改过多")
+    comment_parts.append("- 🔍 详细分析报告可通过 API 接口获取")
+
+    return "\n".join(comment_parts)
+
+
+def _create_fallback_comment(file_reviews: List[Dict[str, Any]], enhanced_analysis: Dict[str, Any] = None) -> str:
+    """创建极简的备用评论，确保能够发布"""
+    parts = []
+
+    # 基本统计
+    total_files = len(file_reviews)
+    total_issues = sum(len(review.get("issues", [])) for review in file_reviews)
+    critical_issues = sum(1 for review in file_reviews
+                         for issue in review.get("issues", [])
+                         if issue.get("severity") == "critical")
+
+    parts.append("# 🔍 代码审查完成")
+    parts.append("")
+    parts.append(f"📊 **统计**: {total_files} 个文件，{total_issues} 个问题")
+
+    if critical_issues > 0:
+        parts.append(f"🚨 **严重问题**: {critical_issues} 个，请优先处理")
+
+    if enhanced_analysis:
+        score = enhanced_analysis.get('overall_score', 80)
+        parts.append(f"📈 **总体评分**: {score:.1f}/100")
+
+    parts.append("")
+    parts.append("💡 详细报告请查看完整分析或联系管理员")
+
+    return "\n".join(parts)
 
 
 # 构建 LangGraph

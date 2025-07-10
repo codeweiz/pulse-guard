@@ -55,3 +55,7 @@ docker-down:
 
 docker-logs:
 	docker-compose logs -f
+
+# 启动 ngrok 反向代理
+ngrok:
+	ngrok http 8000
