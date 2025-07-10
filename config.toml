@@ -3,20 +3,19 @@
 #model_name = "deepseek-chat"
 #base_url = ""
 
-provider = "ollama"
-model_name = "deepseek-r1:32b"
-base_url = "http://192.168.220.15:11434"
+#provider = "ollama"
+#model_name = "deepseek-r1:32b"
+#base_url = "http://192.168.220.15:11434"
+
+provider = "openai"
+model_name = "qwen-plus"
+base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
 [github]
 api_base_url = "https://api.github.com"
 
 [gitee]
 api_base_url = "https://gitee.com/api/v5"
-
-[review]
-# 代码审查配置
-types = ["code_quality", "security", "best_practices"]
-max_concurrent_reviews = 16
 
 [database]
 # 数据库配置
