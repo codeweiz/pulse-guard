@@ -6,10 +6,10 @@
 
 from .base import PlatformProvider
 from .factory import PlatformFactory, get_platform_provider
+from .gitee_provider import GiteeProvider
 
 # 导入所有平台提供者以触发自动注册
 from .github_provider import GitHubProvider
-from .gitee_provider import GiteeProvider
 
 # from .gitlab_provider import GitLabProvider  # 示例平台，暂时注释
 

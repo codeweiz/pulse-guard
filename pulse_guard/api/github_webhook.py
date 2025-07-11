@@ -1,20 +1,22 @@
 """
 GitHub Webhook 处理模块。
 """
+
 import logging
 from typing import Any
 
-from fastapi import Request, HTTPException
+from fastapi import Request
 from starlette.responses import JSONResponse
 
-from pulse_guard.config import config
 from pulse_guard.worker.tasks import process_pull_request
 
 # 配置日志
 logger = logging.getLogger(__name__)
 
 
-async def handle_webhook(request: Request) -> JSONResponse | dict[str, str | None | Any]:
+async def handle_webhook(
+    request: Request,
+) -> JSONResponse | dict[str, str | None | Any]:
     """处理 GitHub Webhook 请求
 
     Args:
@@ -49,15 +51,14 @@ async def handle_webhook(request: Request) -> JSONResponse | dict[str, str | Non
         repo = repo_data["full_name"]  # owner/repo
         pr_number = pr_data["number"]
 
-        logger.info(f"Processing PR event: repo={repo}, pr_number={pr_number}, action={action}")
+        logger.info(
+            f"Processing PR event: repo={repo}, pr_number={pr_number}, action={action}"
+        )
 
         # 检查是否是我们关心的事件类型
         if action in ["opened", "synchronize", "reopened", "edited"]:
             # 异步处理 PR
-            task = process_pull_request.delay(
-                repo=repo,
-                pr_number=pr_number
-            )
+            task = process_pull_request.delay(repo=repo, pr_number=pr_number)
             logger.info(f"Task created with ID: {task.id}")
 
             return {
@@ -65,7 +66,7 @@ async def handle_webhook(request: Request) -> JSONResponse | dict[str, str | Non
                 "message": f"Processing PR #{pr_number} from {repo}",
                 "event_type": event_type,
                 "action": action,
-                "task_id": task.id
+                "task_id": task.id,
             }
         else:
             logger.info(f"PR action '{action}' not supported, ignoring")
@@ -73,7 +74,7 @@ async def handle_webhook(request: Request) -> JSONResponse | dict[str, str | Non
                 "status": "success",
                 "message": f"PR action '{action}' not supported",
                 "event_type": event_type,
-                "action": action
+                "action": action,
             }
 
     except Exception as e:
@@ -82,7 +83,7 @@ async def handle_webhook(request: Request) -> JSONResponse | dict[str, str | Non
             content={
                 "status": "error",
                 "message": f"Error processing webhook: {str(e)}",
-                "headers": headers
+                "headers": headers,
             },
-            status_code=500
+            status_code=500,
         )

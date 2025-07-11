@@ -1,6 +1,7 @@
 """
 Gitee Webhook 处理模块。
 """
+
 import logging
 from typing import Any
 
@@ -44,18 +45,24 @@ async def handle_webhook(request: Request) -> JSONResponse | dict[str, str | Any
 
         if not pr_data or not repo_data:
             logger.info("缺少 PR 或仓库数据，已忽略")
-            return JSONResponse(content={"msg": "缺少 PR 或仓库数据，已忽略"}, status_code=200)
+            return JSONResponse(
+                content={"msg": "缺少 PR 或仓库数据，已忽略"}, status_code=200
+            )
 
         # 提取 PR 信息
         repo = repo_data["full_name"]
         pr_number = pr_data["number"]
 
-        logger.info(f"处理 Gitee PR 事件: 仓库={repo}, PR 编号={pr_number}, 操作={action}")
+        logger.info(
+            f"处理 Gitee PR 事件: 仓库={repo}, PR 编号={pr_number}, 操作={action}"
+        )
 
         # 检查事件类型是否在 "open", "update", "reopen", "edit" 中
         if action in ["open", "update", "reopen", "edit"]:
             # 异步处理 PR
-            task = process_pull_request.delay(repo=repo, pr_number=pr_number, platform="gitee")
+            task = process_pull_request.delay(
+                repo=repo, pr_number=pr_number, platform="gitee"
+            )
             logger.info(f"Task created with ID: {task.id}")
 
             return {
@@ -63,7 +70,7 @@ async def handle_webhook(request: Request) -> JSONResponse | dict[str, str | Any
                 "message": f"仓库 {repo} 的 PR 编号{pr_number} 正在处理中",
                 "event_type": event_type,
                 "action": action,
-                "task_id": task.id
+                "task_id": task.id,
             }
         else:
             logger.info(f"PR 操作 '{action}' 不受支持，已忽略")
@@ -71,11 +78,11 @@ async def handle_webhook(request: Request) -> JSONResponse | dict[str, str | Any
                 "status": "success",
                 "message": f"PR action '{action}' not supported",
                 "event_type": event_type,
-                "action": action
+                "action": action,
             }
     except Exception as e:
         logger.error(f"执行 webhook 时出错: {str(e)}")
         return JSONResponse(
             content={"status": "error", "message": f"处理 webhook 时出错: {str(e)}"},
-            status_code=500
+            status_code=500,
         )

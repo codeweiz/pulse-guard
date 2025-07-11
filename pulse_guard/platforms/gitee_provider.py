@@ -1,17 +1,18 @@
 """
 Gitee 平台提供者实现。
 """
+
 import base64
 import logging
 from datetime import datetime
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
 import requests
 
-from .base import PlatformProvider
-from .factory import register_platform
 from ..config import config
 from ..models.gitee import GiteeFile, PullRequest, ReviewComment
+from .base import PlatformProvider
+from .factory import register_platform
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +27,9 @@ class GiteeProvider(PlatformProvider):
         self.api_base_url = config.gitee.api_base_url
         self.access_token = config.gitee.access_token
         self.session = requests.Session()
-        self.session.headers.update({
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        })
+        self.session.headers.update(
+            {"Content-Type": "application/json", "Accept": "application/json"}
+        )
 
     def _make_request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
         """发送 API 请求
@@ -65,7 +65,9 @@ class GiteeProvider(PlatformProvider):
         # 转换日期字段
         for date_field in ["created_at", "updated_at", "closed_at", "merged_at"]:
             if data.get(date_field):
-                data[date_field] = datetime.fromisoformat(data[date_field].replace("Z", "+00:00"))
+                data[date_field] = datetime.fromisoformat(
+                    data[date_field].replace("Z", "+00:00")
+                )
 
         pr = PullRequest(**data)
         return {
@@ -98,7 +100,9 @@ class GiteeProvider(PlatformProvider):
                 # 现在 GiteeFile 模型可以自动处理数据验证和转换
                 processed_files.append(GiteeFile(**file_data))
             except Exception as e:
-                logger.error(f"Error creating GiteeFile from data {file_data}: {str(e)}")
+                logger.error(
+                    f"Error creating GiteeFile from data {file_data}: {str(e)}"
+                )
                 # 跳过有问题的文件，继续处理其他文件
                 continue
 
@@ -119,28 +123,31 @@ class GiteeProvider(PlatformProvider):
         logger.debug(f"Getting Gitee file content: {repo}/{file_path}@{ref}")
 
         response = self._make_request(
-            "GET",
-            f"/repos/{repo}/contents/{file_path}",
-            params={"ref": ref}
+            "GET", f"/repos/{repo}/contents/{file_path}", params={"ref": ref}
         )
         data = response.json()
 
         content = base64.b64decode(data["content"]).decode("utf-8")
         return content
 
-    def post_pr_comment(self, repo: str, pr_number: int, comment: str) -> Dict[str, Any]:
+    def post_pr_comment(
+        self, repo: str, pr_number: int, comment: str
+    ) -> Dict[str, Any]:
         """发布 Gitee Pull Request 评论"""
         logger.debug(f"Posting Gitee PR comment: {repo}#{pr_number}")
 
         response = self._make_request(
-            "POST",
-            f"/repos/{repo}/pulls/{pr_number}/comments",
-            json={"body": comment}
+            "POST", f"/repos/{repo}/pulls/{pr_number}/comments", json={"body": comment}
         )
         return response.json()
 
     def create_pull_request_review(
-            self, repo: str, pr_number: int, commit_id: str, body: str, comments: List[ReviewComment]
+        self,
+        repo: str,
+        pr_number: int,
+        commit_id: str,
+        body: str,
+        comments: List[ReviewComment],
     ) -> Dict[str, Any]:
         """创建 Pull Request 审查
 
@@ -164,8 +171,6 @@ class GiteeProvider(PlatformProvider):
             payload["comments"] = [comment.model_dump() for comment in comments]
 
         response = self._make_request(
-            "POST",
-            f"/repos/{repo}/pulls/{pr_number}/reviews",
-            json=payload
+            "POST", f"/repos/{repo}/pulls/{pr_number}/reviews", json=payload
         )
         return response.json()

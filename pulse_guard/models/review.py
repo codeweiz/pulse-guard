@@ -1,14 +1,16 @@
 """
 代码审查结果相关的数据模型。
 """
+
 from enum import Enum
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel
 
 
 class SeverityLevel(str, Enum):
     """严重程度级别"""
+
     INFO = "info"
     WARNING = "warning"
     ERROR = "error"
@@ -17,6 +19,7 @@ class SeverityLevel(str, Enum):
 
 class IssueCategory(str, Enum):
     """问题类别"""
+
     CODE_QUALITY = "code_quality"
     SECURITY = "security"
     PERFORMANCE = "performance"
@@ -27,6 +30,7 @@ class IssueCategory(str, Enum):
 
 class CodeIssue(BaseModel):
     """代码问题模型"""
+
     title: str
     description: str
     severity: SeverityLevel
@@ -38,6 +42,7 @@ class CodeIssue(BaseModel):
 
 class FileReview(BaseModel):
     """文件审查结果模型"""
+
     filename: str
     issues: List[CodeIssue] = []
     summary: str = ""
@@ -58,6 +63,7 @@ class FileReview(BaseModel):
 
 class PRReview(BaseModel):
     """PR 审查结果模型"""
+
     pr_number: int
     repo_full_name: str
     file_reviews: List[FileReview] = []
@@ -79,7 +85,7 @@ class PRReview(BaseModel):
 
     def format_comment(self) -> str:
         """格式化为 GitHub 评论"""
-        comment = f"# 代码审查结果\n\n"
+        comment = "# 代码审查结果\n\n"
 
         # 添加总结
         comment += f"## 总体评价\n\n{self.overall_summary}\n\n"
@@ -95,12 +101,16 @@ class PRReview(BaseModel):
             if file_review.has_issues:
                 comment += "### 发现的问题\n\n"
                 for issue in file_review.issues:
-                    location = f"第 {issue.line_start}-{issue.line_end} 行" if issue.line_start else ""
+                    location = (
+                        f"第 {issue.line_start}-{issue.line_end} 行"
+                        if issue.line_start
+                        else ""
+                    )
                     severity_emoji = {
                         SeverityLevel.INFO: "ℹ️",
                         SeverityLevel.WARNING: "⚠️",
                         SeverityLevel.ERROR: "❌",
-                        SeverityLevel.CRITICAL: "🚨"
+                        SeverityLevel.CRITICAL: "🚨",
                     }
 
                     comment += f"#### {severity_emoji[issue.severity]} {issue.title} ({issue.category.value})\n\n"

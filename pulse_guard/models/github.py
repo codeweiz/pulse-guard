@@ -1,9 +1,10 @@
 """
 GitHub 相关的数据模型。
 """
+
 import logging
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, field_validator
 
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 class GitHubUser(BaseModel):
     """GitHub 用户模型"""
+
     id: int
     login: str
     avatar_url: Optional[str] = None
@@ -21,6 +23,7 @@ class GitHubUser(BaseModel):
 
 class GitHubRepository(BaseModel):
     """GitHub 仓库模型"""
+
     id: int
     name: str
     full_name: str
@@ -32,6 +35,7 @@ class GitHubRepository(BaseModel):
 
 class GitHubCommit(BaseModel):
     """GitHub 提交模型"""
+
     sha: str
     message: str
     author: GitHubUser
@@ -41,6 +45,7 @@ class GitHubCommit(BaseModel):
 
 class GitHubFile(BaseModel):
     """GitHub 文件模型"""
+
     filename: str
     status: str  # added, modified, removed
     additions: int
@@ -55,6 +60,7 @@ class GitHubFile(BaseModel):
 
 class PullRequest(BaseModel):
     """Pull Request 模型"""
+
     id: int
     number: int
     title: str
@@ -90,12 +96,13 @@ class PullRequest(BaseModel):
 
 class WebhookEvent(BaseModel):
     """Webhook 事件模型"""
+
     event_type: str
     delivery_id: str
     signature: Optional[Any] = None
     payload: Dict[str, Any]
 
-    @field_validator('event_type', 'delivery_id', 'signature')
+    @field_validator("event_type", "delivery_id", "signature")
     @classmethod
     def validate_headers(cls, v, info):
         """Convert header values to strings"""
@@ -107,10 +114,10 @@ class WebhookEvent(BaseModel):
                 return str_value
             except Exception as e:
                 logger.error(f"Error converting {info.field_name} to string: {str(e)}")
-                if info.field_name == 'signature':
+                if info.field_name == "signature":
                     return None  # signature 可以为 None
                 return ""  # 其他字段返回空字符串
-        return "" if info.field_name != 'signature' else None
+        return "" if info.field_name != "signature" else None
 
     @property
     def is_pull_request_event(self) -> bool:
@@ -137,6 +144,7 @@ class WebhookEvent(BaseModel):
 
 class ReviewComment(BaseModel):
     """代码审查评论模型"""
+
     body: str
     path: Optional[str] = None
     position: Optional[int] = None

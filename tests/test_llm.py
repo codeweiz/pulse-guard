@@ -7,7 +7,7 @@ def test_ollama():
         model="deepseek-r1:32b",
         model_provider="ollama",
         base_url="http://192.168.220.15:11434",
-        api_key="21321323423432"
+        api_key="21321323423432",
     )
 
     prompt = "请介绍一下你自己。"
