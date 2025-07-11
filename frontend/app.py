@@ -1,7 +1,7 @@
 import os
 import sys
 from datetime import datetime, timedelta
-from typing import Any, Dict, Tuple
+from typing import Tuple
 
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -152,8 +152,8 @@ class PRReviewApp:
                         "问题数": file_review.issues_count,
                         "影响级别": file_review.impact_level,
                         "摘要": (
-                            file_review.summary[:100] + "..."
-                            if len(file_review.summary) > 100
+                            file_review.summary[:200] + "..."
+                            if len(file_review.summary) > 200
                             else file_review.summary
                         ),
                     }
@@ -185,13 +185,13 @@ class PRReviewApp:
                         "类别": issue.category,
                         "行号": issue.line_start or "",
                         "描述": (
-                            issue.description[:100] + "..."
-                            if len(issue.description) > 100
+                            issue.description[:150] + "..."
+                            if len(issue.description) > 150
                             else issue.description
                         ),
                         "建议": (
-                            issue.suggestion[:100] + "..."
-                            if issue.suggestion and len(issue.suggestion) > 100
+                            issue.suggestion[:150] + "..."
+                            if issue.suggestion and len(issue.suggestion) > 150
                             else issue.suggestion or ""
                         ),
                     }
@@ -212,9 +212,7 @@ class PRReviewApp:
         finally:
             close_db(db)
 
-    def get_repository_statistics(
-        self, repo_name: str = "", days: int = 30
-    ) -> Tuple[str, Dict[str, Any]]:
+    def get_repository_statistics(self, repo_name: str = "", days: int = 30) -> str:
         """获取仓库统计信息"""
         db = get_db()
         try:
@@ -233,7 +231,7 @@ class PRReviewApp:
             reviews = query.all()
 
             if not reviews:
-                return "指定时间范围内没有审查记录", {}
+                return "指定时间范围内没有审查记录"
 
             # 计算统计信息
             total_reviews = len(reviews)
@@ -296,19 +294,17 @@ class PRReviewApp:
 - **70-79分**: {score_ranges['70-79']} 次
 - **60-69分**: {score_ranges['60-69']} 次
 - **60分以下**: {score_ranges['<60']} 次
+
+## 详细分析
+- **平均问题密度**: {total_issues / total_reviews:.1f} 问题/PR
+- **严重问题比例**: {(critical_issues / total_issues * 100) if total_issues > 0 else 0:.1f}%
+- **高质量PR比例** (≥90分): {(score_ranges['90-100'] / total_reviews * 100):.1f}%
 """
 
-            return stats_text, {
-                "total_reviews": total_reviews,
-                "avg_score": avg_score,
-                "total_issues": total_issues,
-                "critical_issues": critical_issues,
-                "platform_stats": platform_stats,
-                "score_ranges": score_ranges,
-            }
+            return stats_text
 
         except Exception as e:
-            return f"获取统计信息失败: {str(e)}", {}
+            return f"获取统计信息失败: {str(e)}"
         finally:
             close_db(db)
 
@@ -418,23 +414,26 @@ def create_interface():
             with gr.TabItem("📄 PR详情"):
                 gr.Markdown("## 查看PR审查详情")
 
-                pr_id_input = gr.Number(label="PR审查记录ID", value=0, minimum=0)
-                detail_btn = gr.Button("📖 查看详情", variant="primary")
-
-                pr_detail_info = gr.Markdown(label="PR基本信息")
-
                 with gr.Row():
-                    with gr.Column():
-                        gr.Markdown("### 📁 文件审查结果")
-                        file_reviews_table = gr.Dataframe(
-                            label="文件审查记录", interactive=False, wrap=True
-                        )
+                    pr_id_input = gr.Number(label="PR审查记录ID", value=0, minimum=0)
+                    detail_btn = gr.Button("📖 查看详情", variant="primary")
 
-                    with gr.Column():
-                        gr.Markdown("### 🐛 问题详情")
-                        issues_table = gr.Dataframe(
-                            label="问题记录", interactive=False, wrap=True
-                        )
+                # PR基本信息区域
+                pr_detail_info = gr.Markdown(
+                    label="PR基本信息", elem_id="pr_detail_info"
+                )
+
+                # 文件审查结果区域 - 独立占用全宽
+                gr.Markdown("### 📁 文件审查结果")
+                file_reviews_table = gr.Dataframe(
+                    label="文件审查记录", interactive=False, wrap=True
+                )
+
+                # 问题详情区域 - 独立占用全宽
+                gr.Markdown("### 🐛 问题详情")
+                issues_table = gr.Dataframe(
+                    label="问题记录", interactive=False, wrap=True
+                )
 
                 detail_btn.click(
                     app.get_pr_detail,
@@ -505,5 +504,5 @@ if __name__ == "__main__":
 
     interface = create_interface()
     interface.launch(
-        server_name="127.0.0.1", server_port=7861, share=False, debug=False
+        server_name="127.0.0.1", server_port=7860, share=False, debug=False
     )

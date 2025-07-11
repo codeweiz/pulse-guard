@@ -41,7 +41,7 @@ run-backend:
 
 # 运行前端
 run-frontend:
-	python3 -m frontend.app
+	uv run python -m frontend.app
 
 # 运行 Celery Worker
 worker:

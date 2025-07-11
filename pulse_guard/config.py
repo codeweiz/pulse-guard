@@ -99,9 +99,7 @@ class DatabaseConfig(BaseModel):
         description="数据库URL",
     )
     echo: bool = Field(
-        default=toml_config.get("database", {}).get(
-            "echo", True
-        ),
+        default=toml_config.get("database", {}).get("echo", True),
         description="是否显示SQL语句",
     )
 
