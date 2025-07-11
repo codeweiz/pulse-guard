@@ -1,6 +1,7 @@
 """
 LLM 客户端模块，负责与 LLM 服务交互。
 """
+
 from typing import Optional
 
 from langchain.chat_models import init_chat_model
@@ -10,11 +11,11 @@ from pulse_guard.config import config
 
 
 def get_llm(
-        provider: Optional[str] = None,
-        model_name: Optional[str] = None,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-        **kwargs
+    provider: Optional[str] = None,
+    model_name: Optional[str] = None,
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+    **kwargs,
 ) -> BaseChatModel:
     """获取 LLM 客户端
 
@@ -39,5 +40,5 @@ def get_llm(
         model_provider=provider,
         api_key=api_key,
         base_url=base_url,
-        **kwargs
+        **kwargs,
     )

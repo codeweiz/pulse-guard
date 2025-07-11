@@ -1,9 +1,10 @@
 """
 Gitee 相关的数据模型。
 """
+
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, field_validator
 
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 class GiteeUser(BaseModel):
     """Gitee 用户模型"""
+
     id: int
     login: str
     name: Optional[str] = None
@@ -28,6 +30,7 @@ class GiteeUser(BaseModel):
 
 class GiteeFile(BaseModel):
     """Gitee 文件模型"""
+
     filename: str
     status: Optional[str] = None  # 可能为 None，added, modified, removed
     additions: int = 0
@@ -37,7 +40,7 @@ class GiteeFile(BaseModel):
     blob_url: Optional[str] = None
     raw_url: Optional[str] = None
 
-    @field_validator('status')
+    @field_validator("status")
     @classmethod
     def validate_status(cls, v):
         """验证并修复 status 字段"""
@@ -45,25 +48,25 @@ class GiteeFile(BaseModel):
             return "modified"  # 默认值
         return v
 
-    @field_validator('changes')
+    @field_validator("changes")
     @classmethod
     def validate_changes(cls, v, info):
         """验证并计算 changes 字段"""
         if v is None:
             # 如果 changes 为 None，从 additions 和 deletions 计算
             data = info.data
-            additions = data.get('additions', 0)
-            deletions = data.get('deletions', 0)
+            additions = data.get("additions", 0)
+            deletions = data.get("deletions", 0)
             return additions + deletions
         return v
 
-    @field_validator('patch')
+    @field_validator("patch")
     @classmethod
     def validate_patch(cls, v):
         """验证并处理 patch 字段"""
         if isinstance(v, dict):
             # 如果是字典，尝试提取 diff 字段
-            return v.get('diff')
+            return v.get("diff")
         elif isinstance(v, str):
             # 如果是字符串，直接返回
             return v
@@ -74,6 +77,7 @@ class GiteeFile(BaseModel):
 
 class PullRequest(BaseModel):
     """Pull Request 模型"""
+
     id: int
     number: int
     title: str
@@ -110,12 +114,13 @@ class PullRequest(BaseModel):
 
 class WebhookEvent(BaseModel):
     """Webhook 事件模型"""
+
     event_type: str
     delivery_id: str
     signature: Optional[Any] = None
     payload: Dict[str, Any]
 
-    @field_validator('event_type', 'delivery_id', 'signature')
+    @field_validator("event_type", "delivery_id", "signature")
     @classmethod
     def validate_headers(cls, v, info):
         """Convert header values to strings"""
@@ -127,10 +132,10 @@ class WebhookEvent(BaseModel):
                 return str_value
             except Exception as e:
                 logger.error(f"Error converting {info.field_name} to string: {str(e)}")
-                if info.field_name == 'signature':
+                if info.field_name == "signature":
                     return None  # signature 可以为 None
                 return ""  # 其他字段返回空字符串
-        return "" if info.field_name != 'signature' else None
+        return "" if info.field_name != "signature" else None
 
     @property
     def is_pull_request_event(self) -> bool:
@@ -157,6 +162,7 @@ class WebhookEvent(BaseModel):
 
 class ReviewComment(BaseModel):
     """代码审查评论模型"""
+
     body: str
     path: Optional[str] = None
     position: Optional[int] = None

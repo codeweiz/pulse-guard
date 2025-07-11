@@ -1,8 +1,9 @@
 """
 应用入口模块。
 """
+
 import logging
-from typing import Dict, Any
+from typing import Any, Dict
 
 import uvicorn
 from fastapi import FastAPI, Request
@@ -14,7 +15,7 @@ from pulse_guard.api.routes import router as api_router
 # 配置日志
 logging.basicConfig(
     level=logging.DEBUG,  # 开发时使用 DEBUG 级别，生产环境可以改为 INFO
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
 # 设置特定模块的日志级别
@@ -29,9 +30,7 @@ logger = logging.getLogger(__name__)
 
 # 创建 FastAPI 应用
 app = FastAPI(
-    title="Pulse Guard",
-    description="自动化 PR 代码质量审查工具",
-    version="0.1.0"
+    title="Pulse Guard", description="自动化 PR 代码质量审查工具", version="0.1.0"
 )
 
 # 添加 CORS 中间件
@@ -51,10 +50,7 @@ app.include_router(api_router, prefix="/api")
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """全局异常处理器"""
     logger.error(f"Unhandled exception: {str(exc)}")
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "服务内部错误"}
-    )
+    return JSONResponse(status_code=500, content={"detail": "服务内部错误"})
 
 
 @app.get("/")
@@ -63,7 +59,7 @@ async def root() -> Dict[str, Any]:
     return {
         "name": "Pulse Guard",
         "description": "自动化 PR 代码质量审查工具",
-        "version": "0.1.0"
+        "version": "0.1.0",
     }
 
 

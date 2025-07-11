@@ -1,8 +1,9 @@
 """
 Celery 任务定义模块。
 """
+
 import logging
-from typing import Dict, Any
+from typing import Any, Dict
 
 from pulse_guard.agent.graph import run_code_review
 from pulse_guard.worker.celery_app import celery_app
@@ -11,8 +12,12 @@ from pulse_guard.worker.celery_app import celery_app
 logger = logging.getLogger(__name__)
 
 
-@celery_app.task(bind=True, max_retries=3, name="pulse_guard.worker.tasks.process_pull_request")
-def process_pull_request(self, repo: str, pr_number: int, platform: str = "github") -> Dict[str, Any]:
+@celery_app.task(
+    bind=True, max_retries=3, name="pulse_guard.worker.tasks.process_pull_request"
+)
+def process_pull_request(
+    self, repo: str, pr_number: int, platform: str = "github"
+) -> Dict[str, Any]:
     """处理 Pull Request
 
     Args:
@@ -31,11 +36,9 @@ def process_pull_request(self, repo: str, pr_number: int, platform: str = "githu
         logger.info(f"Processing PR #{pr_number} from {repo}")
 
         # 运行代码审查 - 使用简化工作流
-        result = run_code_review({
-            "repo": repo,
-            "number": pr_number,
-            "platform": platform
-        })
+        result = run_code_review(
+            {"repo": repo, "number": pr_number, "platform": platform}
+        )
 
         logger.info(f"Completed review for PR #{pr_number} from {repo}")
 
@@ -63,7 +66,7 @@ def process_pull_request(self, repo: str, pr_number: int, platform: str = "githu
             "repo": repo,
             "platform": platform,
             "file_count": file_count,
-            "issue_count": issue_count
+            "issue_count": issue_count,
         }
     except Exception as e:
         logger.error(f"Error processing PR #{pr_number} from {repo}: {str(e)}")
@@ -74,5 +77,5 @@ def process_pull_request(self, repo: str, pr_number: int, platform: str = "githu
             "pr_number": pr_number,
             "repo": repo,
             "platform": platform,
-            "error": str(e)
+            "error": str(e),
         }

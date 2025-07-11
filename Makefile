@@ -1,4 +1,4 @@
-.PHONY: install dev clean lint test run worker docker-build docker-up docker-down
+.PHONY: install dev clean lint test run-backend run-frontend worker docker-build docker-up docker-down
 
 # 安装依赖
 install:
@@ -36,8 +36,12 @@ test:
 	uv run pytest -v
 
 # 运行 Web 服务
-run:
+run-backend:
 	uv run uvicorn pulse_guard.main:app --host 0.0.0.0 --port 8000 --reload
+
+# 运行前端
+run-frontend:
+	uv run python -m frontend.app
 
 # 运行 Celery Worker
 worker:

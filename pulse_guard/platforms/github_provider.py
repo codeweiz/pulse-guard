@@ -1,17 +1,18 @@
 """
 GitHub 平台提供者实现。
 """
+
 import base64
 import logging
 from datetime import datetime
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
 import httpx
 
-from .base import PlatformProvider
-from .factory import register_platform
 from ..config import config
 from ..models.github import GitHubFile, PullRequest, ReviewComment
+from .base import PlatformProvider
+from .factory import register_platform
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +45,7 @@ class GitHubProvider(PlatformProvider):
         url = f"{self.api_base_url}{endpoint}"
         with httpx.Client() as client:
             response = client.request(
-                method=method,
-                url=url,
-                headers=self.headers,
-                **kwargs
+                method=method, url=url, headers=self.headers, **kwargs
             )
             response.raise_for_status()
             return response
@@ -62,7 +60,9 @@ class GitHubProvider(PlatformProvider):
         # 转换日期字段
         for date_field in ["created_at", "updated_at", "closed_at", "merged_at"]:
             if data.get(date_field):
-                data[date_field] = datetime.fromisoformat(data[date_field].replace("Z", "+00:00"))
+                data[date_field] = datetime.fromisoformat(
+                    data[date_field].replace("Z", "+00:00")
+                )
 
         pr = PullRequest(**data)
         return {
@@ -104,9 +104,7 @@ class GitHubProvider(PlatformProvider):
         logger.debug(f"Getting GitHub file content: {repo}/{file_path}@{ref}")
 
         response = self._make_request(
-            "GET",
-            f"/repos/{repo}/contents/{file_path}",
-            params={"ref": ref}
+            "GET", f"/repos/{repo}/contents/{file_path}", params={"ref": ref}
         )
         data = response.json()
 
@@ -120,19 +118,24 @@ class GitHubProvider(PlatformProvider):
 
         return content
 
-    def post_pr_comment(self, repo: str, pr_number: int, comment: str) -> Dict[str, Any]:
+    def post_pr_comment(
+        self, repo: str, pr_number: int, comment: str
+    ) -> Dict[str, Any]:
         """发布 GitHub Pull Request 评论"""
         logger.debug(f"Posting GitHub PR comment: {repo}#{pr_number}")
 
         response = self._make_request(
-            "POST",
-            f"/repos/{repo}/issues/{pr_number}/comments",
-            json={"body": comment}
+            "POST", f"/repos/{repo}/issues/{pr_number}/comments", json={"body": comment}
         )
         return response.json()
 
     def create_pull_request_review(
-            self, repo: str, pr_number: int, commit_id: str, body: str, comments: List[ReviewComment]
+        self,
+        repo: str,
+        pr_number: int,
+        commit_id: str,
+        body: str,
+        comments: List[ReviewComment],
     ) -> Dict[str, Any]:
         """创建 Pull Request 审查
 
@@ -156,8 +159,6 @@ class GitHubProvider(PlatformProvider):
             payload["comments"] = [comment.dict() for comment in comments]
 
         response = self._make_request(
-            "POST",
-            f"/repos/{repo}/pulls/{pr_number}/reviews",
-            json=payload
+            "POST", f"/repos/{repo}/pulls/{pr_number}/reviews", json=payload
         )
         return response.json()
