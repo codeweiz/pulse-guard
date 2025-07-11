@@ -1,5 +1,5 @@
 # Pulse Guard Docker 镜像
-FROM python:3.12-slim
+FROM python:3.11-slim
 
 # 设置环境变量
 ENV PYTHONUNBUFFERED=1 \
