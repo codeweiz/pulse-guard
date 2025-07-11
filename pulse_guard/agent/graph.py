@@ -1,15 +1,7 @@
-"""
-LangGraph 代码审查 Agent 实现。
-"""
-
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional, TypedDict, Union
-
-from langchain_core.messages import AIMessage, HumanMessage
+from typing import Any, Dict, List, Optional, Union
 from langgraph.graph import END, StateGraph
-
-from pulse_guard.agent.data_validator import data_validator
 from pulse_guard.llm.client import get_llm
 from pulse_guard.models.review import (
     CodeIssue,
@@ -18,238 +10,119 @@ from pulse_guard.models.review import (
     PRReview,
     SeverityLevel,
 )
+from pulse_guard.models.workflow import (
+    AgentState,
+    CodeIssueInfo,
+    EnhancedAnalysis,
+    FileInfo,
+    FileReviewInfo,
+    PRInfo,
+    UserInfo,
+)
 from pulse_guard.platforms import get_platform_provider
+from pulse_guard.utils.file_type_utils import is_code_file
 
 # 配置日志
 logger = logging.getLogger(__name__)
 
 
-# 定义 Agent 状态类型
-class AgentState(TypedDict):
-    """Agent 状态"""
-
-    messages: List[Union[AIMessage, HumanMessage]]
-    pr_info: Dict[str, Any]
-    files: List[Dict[str, Any]]
-    file_contents: Dict[str, str]
-    current_file_index: int
-    file_reviews: List[Dict[str, Any]]
-    overall_summary: Optional[str]
-    enhanced_analysis: Optional[Dict[str, Any]]
-    db_record_id: Optional[int]
-
-
-# 代码文件扩展名
-CODE_EXTENSIONS = {
-    ".py",
-    ".vue",
-    ".js",
-    ".ts",
-    ".jsx",
-    ".tsx",
-    ".java",
-    ".cpp",
-    ".c",
-    ".h",
-    ".hpp",
-    ".go",
-    ".rs",
-    ".php",
-    ".rb",
-    ".swift",
-    ".kt",
-    ".scala",
-    ".cs",
-    ".vb",
-    ".sql",
-    ".yaml",
-    ".yml",
-    ".xml",
-    ".html",
-    ".css",
-    ".scss",
-    ".less",
-    ".sh",
-    ".bash",
-    ".ps1",
-    ".bat",
-    ".dockerfile",
-    ".makefile",
-    ".md",
-    ".txt",
-    ".cfg",
-    ".conf",
-    ".ini",
-    ".toml",
-    ".properties",
-    ".gradle",
-    ".maven",
-    ".sbt",
-    ".cmake",
-    ".r",
-    ".m",
-    ".pl",
-    ".lua",
-}
-
-# 跳过的文件模式
-SKIP_PATTERNS = [
-    r".*\.(png|jpg|jpeg|gif|svg|ico|bmp|tiff|webp)$",  # 图片
-    r".*\.(pdf|doc|docx|xls|xlsx|ppt|pptx)$",  # 文档
-    r".*\.(zip|tar|gz|rar|7z|bz2)$",  # 压缩包
-    r".*\.(mp4|avi|mov|wmv|flv|mp3|wav|ogg)$",  # 媒体文件
-    r"(^|.*/)node_modules/.*",  # 依赖目录
-    r"(^|.*/)\.git/.*",  # Git目录
-    r".*\.min\.(js|css)$",  # 压缩文件
-    r".*\.(lock|log)$",  # 锁文件和日志
-]
-
-
-def _is_code_file(filename: str) -> bool:
-    """判断是否为代码文件"""
-    import re
-
-    # 检查是否匹配跳过模式（使用 search 而不是 match 来匹配路径中的任何位置）
-    for pattern in SKIP_PATTERNS:
-        if re.search(pattern, filename, re.IGNORECASE):
-            return False
-
-    # 特殊文件名检查（优先级最高）
-    code_filenames = {
-        "makefile",
-        "dockerfile",
-        "rakefile",
-        "gemfile",
-        "podfile",
-        "requirements.txt",
-        "package-lock.json",
-        "yarn.lock",
-        "composer.lock",
-        ".gitignore",
-        ".gitattributes",
-        ".dockerignore",
-        ".eslintrc",
-        ".prettierrc",
-        ".babelrc",
-        ".editorconfig",
-        ".env",
-        ".env.example",
-        ".env.local",
-        "license",
-        "changelog",
-        "contributing",
-        "authors",
-        "maintainers",
-    }
-
-    # 检查完整文件名
-    if filename.lower() in code_filenames:
-        return True
-
-    # 检查文件名（不含路径）
-    basename = filename.split("/")[-1].lower()
-    if basename in code_filenames:
-        return True
-
-    # 检查文件扩展名
-    if "." in filename and not filename.startswith("."):
-        ext = "." + filename.split(".")[-1].lower()
-        return ext in CODE_EXTENSIONS
-
-    return False
-
-
 def fetch_pr_and_code_files(state: AgentState) -> AgentState:
-    """获取PR信息和代码文件内容（合并原来的analyze_pr和get_file_contents）"""
-    pr_info = state["pr_info"]
-
-    # 验证和清理PR信息
-    validated_pr_info = data_validator.validate_pr_info(pr_info)
-    platform = validated_pr_info.get("platform", "github")
+    """获取PR信息和代码文件内容"""
+    pr_info = state.pr_info
+    platform = pr_info.platform
 
     # 获取平台提供者
     provider = get_platform_provider(platform)
 
     # 获取 PR 详细信息
-    pr_details = provider.get_pr_info(
-        validated_pr_info["repo"], validated_pr_info["number"]
-    )
+    pr_details = provider.get_pr_info(pr_info.repo, pr_info.number)
 
-    # 验证和合并PR详细信息
-    merged_pr_info = data_validator.validate_pr_info(
-        {**validated_pr_info, **pr_details}
+    # 从 pr_details 中移除可能冲突的字段
+    safe_pr_details = {k: v for k, v in pr_details.items()
+                       if k not in ['repo', 'number', 'platform', 'author']}
+
+    updated_pr_info = PRInfo(
+        repo=pr_info.repo,
+        number=pr_info.number,
+        platform=pr_info.platform,
+        author=pr_info.author,
+        **safe_pr_details
     )
 
     # 获取 PR 修改的文件列表
-    all_files = provider.get_pr_files(
-        validated_pr_info["repo"], validated_pr_info["number"]
-    )
+    all_files = provider.get_pr_files(pr_info.repo, pr_info.number)
 
-    # 验证和清理文件信息
-    validated_files = data_validator.validate_files_info(all_files)
+    # 转换为 FileInfo 模型
+    file_infos = []
+    for file_data in all_files:
+        try:
+            file_info = FileInfo(**file_data)
+            file_infos.append(file_info)
+        except Exception as e:
+            logger.warning(f"跳过无效文件数据: {e}")
+            continue
 
     # 过滤出代码文件
-    code_files = [f for f in validated_files if _is_code_file(f["filename"])]
+    code_files = [f for f in file_infos if is_code_file(f.filename)]
 
     logger.info(
-        f"总文件数: {len(all_files)}, 验证后文件数: {len(validated_files)}, 代码文件数: {len(code_files)}"
+        f"总文件数: {len(all_files)}, 有效文件数: {len(file_infos)}, 代码文件数: {len(code_files)}"
     )
 
     # 获取所有代码文件的内容
     file_contents = {}
+    enhanced_files = []
+
     for file in code_files:
-        if file["status"] != "removed":
+        if file.status != "removed":
             try:
                 content = provider.get_file_content(
-                    merged_pr_info["repo_full_name"],
-                    file["filename"],
-                    merged_pr_info["head_sha"],
+                    updated_pr_info.repo_full_name,
+                    file.filename,
+                    updated_pr_info.head_sha,
                 )
-                file_contents[file["filename"]] = content
+                file_contents[file.filename] = content
+                # 更新文件内容
+                file.content = content
             except Exception as e:
                 # 如果获取文件内容失败，记录错误
-                file_contents[file["filename"]] = (
-                    f"Error fetching file content: {str(e)}"
-                )
-                logger.warning(f"获取文件内容失败 {file['filename']}: {e}")
+                error_msg = f"Error fetching file content: {str(e)}"
+                file_contents[file.filename] = error_msg
+                file.content = error_msg
+                logger.warning(f"获取文件内容失败 {file.filename}: {e}")
 
-    # 将文件内容合并到文件信息中
-    enhanced_files = []
-    for file in code_files:
-        enhanced_file = {**file, "content": file_contents.get(file["filename"], "")}
-        enhanced_files.append(enhanced_file)
+        enhanced_files.append(file)
 
     # 更新状态
-    return {
-        **state,
-        "pr_info": merged_pr_info,
-        "files": enhanced_files,
-        "file_contents": file_contents,
-        "current_file_index": 0,
-        "file_reviews": [],
-    }
+    new_state = state.model_copy()
+    new_state.pr_info = updated_pr_info
+    new_state.files = enhanced_files
+    new_state.file_contents = file_contents
+    new_state.current_file_index = 0
+    new_state.file_reviews = []
+
+    return new_state
 
 
 async def intelligent_code_review(state: AgentState) -> AgentState:
-    """智能代码审查 - 按文件并发调用LLM"""
-    pr_info = state["pr_info"]
-    files = state["files"]
+    """智能代码审查"""
+    pr_info = state.pr_info
+    files = state.files
 
     if not files:
         logger.warning("没有代码文件需要审查")
-        return {
-            **state,
-            "file_reviews": [],
-            "overall_summary": "没有代码文件需要审查",
-            "enhanced_analysis": {
-                "overall_score": 100,
-                "code_quality_score": 100,
-                "security_score": 100,
-                "business_score": 100,
-                "file_results": [],
-                "summary": "没有代码文件需要审查",
-            },
-        }
+        new_state = state.model_copy()
+        new_state.file_reviews = []
+        new_state.overall_summary = "没有代码文件需要审查"
+        new_state.enhanced_analysis = EnhancedAnalysis(
+            overall_score=100,
+            code_quality_score=100,
+            security_score=100,
+            business_score=100,
+            file_results=[],
+            summary="没有代码文件需要审查",
+        )
+        return new_state
 
     logger.info(f"开始并发审查 {len(files)} 个代码文件")
 
@@ -270,83 +143,150 @@ async def intelligent_code_review(state: AgentState) -> AgentState:
         # 处理结果
         for i, (file, result) in enumerate(zip(files, results)):
             if isinstance(result, Exception):
-                logger.error(f"文件 {file['filename']} 审查异常: {result}")
+                logger.error(f"文件 {file.filename} 审查异常: {result}")
                 # 添加失败的默认结果
-                file_reviews.append(
-                    {
-                        "filename": file["filename"],
-                        "score": 70,
-                        "issues": [
-                            {
-                                "type": "error",
-                                "title": "审查失败",
-                                "description": str(result),
-                            }
-                        ],
-                        "positive_points": [],
-                        "summary": f"审查失败: {str(result)}",
-                    }
+                file_review = FileReviewInfo(
+                    filename=file.filename,
+                    score=70,
+                    issues=[
+                        CodeIssueInfo(
+                            type="error",
+                            title="审查失败",
+                            description=str(result),
+                        )
+                    ],
+                    positive_points=[],
+                    summary=f"审查失败: {str(result)}",
                 )
+                file_reviews.append(file_review)
             else:
-                file_reviews.append(result)
-                logger.info(f"文件 {file['filename']} 审查完成")
+                # 将字典结果转换为FileReviewInfo模型
+                if isinstance(result, dict):
+                    issues = []
+                    for issue_data in result.get("issues", []):
+                        try:
+                            issue = CodeIssueInfo(**issue_data)
+                            issues.append(issue)
+                        except Exception as e:
+                            logger.warning(f"转换问题信息失败: {e}")
+                            continue
+
+                    file_review = FileReviewInfo(
+                        filename=result.get("filename", file.filename),
+                        score=result.get("score", 80),
+                        code_quality_score=result.get("code_quality_score", 80),
+                        security_score=result.get("security_score", 80),
+                        business_score=result.get("business_score", 80),
+                        performance_score=result.get("performance_score", 80),
+                        best_practices_score=result.get("best_practices_score", 80),
+                        issues=issues,
+                        positive_points=result.get("positive_points", []),
+                        summary=result.get("summary", ""),
+                    )
+                    file_reviews.append(file_review)
+                else:
+                    # 如果result不是字典，创建一个默认的FileReviewInfo
+                    logger.warning(f"意外的结果类型: {type(result)}, 创建默认审查结果")
+                    file_review = FileReviewInfo(
+                        filename=file.filename,
+                        score=70,
+                        issues=[
+                            CodeIssueInfo(
+                                type="warning",
+                                title="审查结果解析异常",
+                                description=f"无法解析审查结果: {str(result)}",
+                            )
+                        ],
+                        positive_points=[],
+                        summary="审查结果解析异常",
+                    )
+                    file_reviews.append(file_review)
+                logger.info(f"文件 {file.filename} 审查完成")
 
         # 计算总体评分
-        overall_result = _calculate_overall_scores(file_reviews)
+        overall_result = _calculate_overall_scores(
+            [fr.model_dump() if isinstance(fr, FileReviewInfo) else fr for fr in file_reviews])
 
         logger.info(f"并发审查完成，总体评分: {overall_result['overall_score']}")
 
-        return {
-            **state,
-            "file_reviews": file_reviews,
-            "overall_summary": overall_result.get("summary", "并发审查完成"),
-            "enhanced_analysis": {
-                "overall_score": overall_result.get("overall_score", 80),
-                "code_quality_score": overall_result.get("code_quality_score", 80),
-                "security_score": overall_result.get("security_score", 80),
-                "business_score": overall_result.get("business_score", 80),
-                "file_results": file_reviews,
-                "summary": overall_result.get("summary", "并发审查完成"),
-                "standards_passed": overall_result.get("standards_passed", 0),
-                "standards_failed": overall_result.get("standards_failed", 0),
-                "standards_total": overall_result.get("standards_total", 0),
-            },
-        }
+        # 创建增强分析结果
+        enhanced_analysis = EnhancedAnalysis(
+            overall_score=overall_result.get("overall_score", 80),
+            code_quality_score=overall_result.get("code_quality_score", 80),
+            security_score=overall_result.get("security_score", 80),
+            business_score=overall_result.get("business_score", 80),
+            file_results=file_reviews,
+            summary=overall_result.get("summary", "并发审查完成"),
+            standards_passed=overall_result.get("standards_passed", 0),
+            standards_failed=overall_result.get("standards_failed", 0),
+            standards_total=overall_result.get("standards_total", 0),
+        )
+
+        # 更新状态
+        new_state = state.model_copy()
+        new_state.file_reviews = file_reviews
+        new_state.overall_summary = overall_result.get("summary", "并发审查完成")
+        new_state.enhanced_analysis = enhanced_analysis
+
+        return new_state
 
     except Exception as e:
         logger.error(f"并发审查失败: {e}")
         # 降级到简单审查
-        return _fallback_simple_review(state)
+        return state
 
 
 def generate_summary(state: AgentState) -> AgentState:
     """生成总体评价"""
-    file_reviews = state["file_reviews"]
-    enhanced_analysis = state.get("enhanced_analysis")
+    file_reviews = state.file_reviews
+    enhanced_analysis = state.enhanced_analysis
 
     # 如果有增强分析结果，优先使用
     if enhanced_analysis:
-        return {**state, "overall_summary": enhanced_analysis["summary"]}
+        new_state = state.model_copy()
+        new_state.overall_summary = enhanced_analysis.summary
+        return new_state
 
     # 如果没有文件审查结果，返回默认总结
     if not file_reviews:
-        return {**state, "overall_summary": "没有找到需要审查的文件。"}
+        new_state = state.model_copy()
+        new_state.overall_summary = "没有找到需要审查的文件。"
+        return new_state
 
     # 构建文件审查摘要
     file_reviews_text = ""
     for review in file_reviews:
-        filename = review["filename"]
-        summary = review["summary"]
-        issues_count = len(review["issues"])
+        if isinstance(review, FileReviewInfo):
+            filename = review.filename
+            summary = review.summary
+            issues_count = len(review.issues)
 
-        file_reviews_text += f"## {filename}\n"
-        file_reviews_text += f"- 摘要: {summary}\n"
-        file_reviews_text += f"- 问题数: {issues_count}\n"
+            file_reviews_text += f"## {filename}\n"
+            file_reviews_text += f"- 摘要: {summary}\n"
+            file_reviews_text += f"- 问题数: {issues_count}\n"
 
-        if issues_count > 0:
-            file_reviews_text += "- 问题列表:\n"
-            for issue in review["issues"]:
-                file_reviews_text += f"  - [{issue['severity']}] {issue['title']}\n"
+            if issues_count > 0:
+                file_reviews_text += "- 问题列表:\n"
+                for issue in review.issues:
+                    file_reviews_text += f"  - [{issue.severity}] {issue.title}\n"
+        else:
+            # 向后兼容字典格式
+            filename = review.get("filename", "unknown")
+            summary = review.get("summary", "")
+            issues_count = len(review.get("issues", []))
+
+            file_reviews_text += f"## {filename}\n"
+            file_reviews_text += f"- 摘要: {summary}\n"
+            file_reviews_text += f"- 问题数: {issues_count}\n"
+
+            if issues_count > 0:
+                file_reviews_text += "- 问题列表:\n"
+                for issue in review.get("issues", []):
+                    severity = issue.get("severity", "medium") if isinstance(issue, dict) else getattr(issue,
+                                                                                                       "severity",
+                                                                                                       "medium")
+                    title = issue.get("title", "") if isinstance(issue, dict) else getattr(issue, "title", "")
+                    file_reviews_text += f"  - [{severity}] {title}\n"
 
         file_reviews_text += "\n"
 
@@ -371,40 +311,42 @@ def generate_summary(state: AgentState) -> AgentState:
 
     # 获取 LLM 响应
     response = llm.invoke(prompt)
-    overall_summary = response.content
+    overall_summary = str(response.content if hasattr(response, 'content') else response)
 
     # 更新状态
-    return {**state, "overall_summary": overall_summary}
+    new_state = state.model_copy()
+    new_state.overall_summary = overall_summary
+    return new_state
 
 
 def post_review_comment(state: AgentState) -> AgentState:
     """发布审查评论并保存到数据库"""
-    pr_info = state["pr_info"]
-    platform = pr_info.get("platform", "github")
-    file_reviews = state["file_reviews"]
-    overall_summary = state["overall_summary"]
-    enhanced_analysis = state.get("enhanced_analysis")
+    pr_info = state.pr_info
+    platform = pr_info.platform
+    file_reviews = state.file_reviews
+    overall_summary = state.overall_summary
+    enhanced_analysis = state.enhanced_analysis
 
     # 首先保存审查结果到数据库
     try:
         from pulse_guard.database import DatabaseManager
 
         db_record_id = DatabaseManager.save_complete_review_result(
-            repo_full_name=pr_info.get("repo_full_name", pr_info.get("repo", "")),
-            pr_number=pr_info.get("number", 0),
-            pr_title=pr_info.get("title", ""),
-            pr_description=pr_info.get("description", ""),
-            pr_author=pr_info.get("author", ""),
+            repo_full_name=pr_info.repo_full_name,
+            pr_number=pr_info.number,
+            pr_title=pr_info.title,
+            pr_description=pr_info.body,
+            pr_author=pr_info.author.login,
             platform=platform,
             review_result={
-                "enhanced_analysis": enhanced_analysis,
-                "file_reviews": file_reviews,
+                "enhanced_analysis": enhanced_analysis.model_dump() if enhanced_analysis else None,
+                "file_reviews": [fr.model_dump() if isinstance(fr, FileReviewInfo) else fr for fr in file_reviews],
             },
         )
         logger.info(f"审查结果已保存到数据库，记录ID: {db_record_id}")
 
         # 更新状态中的数据库记录ID
-        state = {**state, "db_record_id": db_record_id}
+        state.db_record_id = db_record_id
 
     except Exception as e:
         logger.error(f"保存审查结果到数据库失败: {e}")
@@ -415,35 +357,61 @@ def post_review_comment(state: AgentState) -> AgentState:
 
     # 添加增强分析结果
     if enhanced_analysis:
+        # 处理Pydantic对象或字典格式
+        if isinstance(enhanced_analysis, EnhancedAnalysis):
+            overall_score = enhanced_analysis.overall_score
+            business_score = enhanced_analysis.business_score
+            code_quality_score = enhanced_analysis.code_quality_score
+            security_score = enhanced_analysis.security_score
+            standards_passed = enhanced_analysis.standards_passed
+            standards_total = enhanced_analysis.standards_total
+            summary = enhanced_analysis.summary
+            file_results = enhanced_analysis.file_results
+        else:
+            # 向后兼容字典格式
+            overall_score = enhanced_analysis.get("overall_score", 80)
+            business_score = enhanced_analysis.get("business_score", 80)
+            code_quality_score = enhanced_analysis.get("code_quality_score", 80)
+            security_score = enhanced_analysis.get("security_score", 80)
+            standards_passed = enhanced_analysis.get("standards_passed", 0)
+            standards_total = enhanced_analysis.get("standards_total", 0)
+            summary = enhanced_analysis.get("summary", "")
+            file_results = enhanced_analysis.get("file_results", [])
+
         comment_parts.append("# 🔍 代码审查报告")
         comment_parts.append("")
         comment_parts.append("## 📊 评分概览")
-        comment_parts.append(
-            f"- **总体评分**: {enhanced_analysis['overall_score']:.1f}/100"
-        )
-        comment_parts.append(
-            f"- **业务逻辑**: {enhanced_analysis['business_score']:.1f}/100"
-        )
-        comment_parts.append(
-            f"- **代码质量**: {enhanced_analysis['code_quality_score']:.1f}/100"
-        )
-        comment_parts.append(
-            f"- **安全性**: {enhanced_analysis['security_score']:.1f}/100"
-        )
-        comment_parts.append(
-            f"- **规范通过率**: {enhanced_analysis['standards_passed']}/{enhanced_analysis['standards_total']}"
-        )
+        comment_parts.append(f"- **总体评分**: {overall_score:.1f}/100")
+        comment_parts.append(f"- **业务逻辑**: {business_score:.1f}/100")
+        comment_parts.append(f"- **代码质量**: {code_quality_score:.1f}/100")
+        comment_parts.append(f"- **安全性**: {security_score:.1f}/100")
+        comment_parts.append(f"- **规范通过率**: {standards_passed}/{standards_total}")
         comment_parts.append("")
         comment_parts.append("## 📝 总体评价")
-        comment_parts.append(enhanced_analysis["summary"])
+        comment_parts.append(summary)
         comment_parts.append("")
 
         # 添加文件影响分析
-        if enhanced_analysis.get("file_results"):
+        if file_results:
             comment_parts.append("## 📁 文件影响分析")
-            for fa in enhanced_analysis["file_results"]:
-                # 安全地获取影响级别，如果没有则使用默认值
-                impact_level = fa.get("impact_level", fa.get("type", "medium"))
+            for fa in file_results:
+                # 处理FileReviewInfo对象或字典格式
+                if isinstance(fa, FileReviewInfo):
+                    filename = fa.filename
+                    code_quality_score = fa.code_quality_score
+                    security_score = fa.security_score
+                    issues_count = len(fa.issues)
+                    summary = fa.summary
+                    impact_level = "medium"  # 默认值，FileReviewInfo没有impact_level字段
+                else:
+                    # 向后兼容字典格式
+                    filename = fa.get("filename", "unknown")
+                    code_quality_score = fa.get("code_quality_score", 80)
+                    security_score = fa.get("security_score", 80)
+                    issues_count = len(fa.get("issues", []))
+                    summary = fa.get("summary", fa.get("business_impact", "无特殊影响"))
+                    impact_level = fa.get("impact_level", fa.get("type", "medium"))
+
                 impact_emoji = {
                     "low": "🟢",
                     "medium": "🟡",
@@ -451,18 +419,12 @@ def post_review_comment(state: AgentState) -> AgentState:
                     "critical": "🔴",
                 }.get(impact_level, "⚪")
 
-                comment_parts.append(f"### {impact_emoji} `{fa['filename']}`")
+                comment_parts.append(f"### {impact_emoji} `{filename}`")
                 comment_parts.append(f"- **影响级别**: {impact_level}")
-                comment_parts.append(
-                    f"- **代码质量**: {fa.get('code_quality_score', 80):.1f}/100"
-                )
-                comment_parts.append(
-                    f"- **安全评分**: {fa.get('security_score', 80):.1f}/100"
-                )
-                comment_parts.append(f"- **问题数量**: {len(fa.get('issues', []))}")
-                comment_parts.append(
-                    f"- **业务影响**: {fa.get('summary', fa.get('business_impact', '无特殊影响'))}"
-                )
+                comment_parts.append(f"- **代码质量**: {code_quality_score:.1f}/100")
+                comment_parts.append(f"- **安全评分**: {security_score:.1f}/100")
+                comment_parts.append(f"- **问题数量**: {issues_count}")
+                comment_parts.append(f"- **业务影响**: {summary}")
                 comment_parts.append("")
 
     # 创建 PR 审查结果 - 安全地创建 CodeIssue 对象
@@ -503,15 +465,16 @@ def post_review_comment(state: AgentState) -> AgentState:
             )
 
     pr_review = PRReview(
-        pr_number=pr_info["number"],
-        repo_full_name=pr_info["repo_full_name"],
-        overall_summary=overall_summary,
+        pr_number=pr_info.number,
+        repo_full_name=pr_info.repo_full_name,
+        overall_summary=overall_summary or "代码审查完成",
         file_reviews=[
             FileReview(
-                filename=review["filename"],
-                summary=review["summary"],
+                filename=review.filename if isinstance(review, FileReviewInfo) else review.get("filename", ""),
+                summary=review.summary if isinstance(review, FileReviewInfo) else review.get("summary", ""),
                 issues=[
-                    _safe_create_code_issue(issue) for issue in review.get("issues", [])
+                    _safe_create_code_issue(issue.model_dump() if isinstance(issue, CodeIssueInfo) else issue)
+                    for issue in (review.issues if isinstance(review, FileReviewInfo) else review.get("issues", []))
                 ],
             )
             for review in file_reviews
@@ -538,8 +501,8 @@ def post_review_comment(state: AgentState) -> AgentState:
             max_length = 8000  # GitHub 限制相对宽松
 
         results = provider.post_pr_comments_batch(
-            pr_info["repo_full_name"],
-            pr_info["number"],
+            pr_info.repo_full_name,
+            pr_info.number,
             comment_text,
             max_length=max_length,
         )
@@ -549,10 +512,10 @@ def post_review_comment(state: AgentState) -> AgentState:
         total_count = len(results)
 
         if success_count == total_count:
-            print(f"✅ 已发布审查评论到 PR #{pr_info['number']} (共 {total_count} 条)")
+            print(f"✅ 已发布审查评论到 PR #{pr_info.number} (共 {total_count} 条)")
         else:
             print(
-                f"⚠️ 部分评论发布成功: {success_count}/{total_count} 条到 PR #{pr_info['number']}"
+                f"⚠️ 部分评论发布成功: {success_count}/{total_count} 条到 PR #{pr_info.number}"
             )
 
     except Exception as e:
@@ -560,21 +523,21 @@ def post_review_comment(state: AgentState) -> AgentState:
         # 如果分批发布失败，尝试发布简化版本
         try:
             simplified_comment = _create_fallback_comment(
-                file_reviews, enhanced_analysis
+                file_reviews, enhanced_analysis  # type: ignore
             )
             provider.post_pr_comment(
-                pr_info["repo_full_name"], pr_info["number"], simplified_comment
+                pr_info.repo_full_name, pr_info.number, simplified_comment
             )
-            print(f"✅ 已发布简化评论到 PR #{pr_info['number']}")
+            print(f"✅ 已发布简化评论到 PR #{pr_info.number}")
         except Exception as fallback_error:
             print(f"❌ 简化评论也发布失败: {str(fallback_error)}")
 
     # 更新状态
-    return {**state, "comment": comment_text}
+    return state
 
 
 def _format_simplified_comment(
-    pr_review: PRReview, file_reviews: List[Dict[str, Any]]
+        pr_review: PRReview, file_reviews: List[Dict[str, Any]]
 ) -> str:
     """格式化简化的评论内容，减少长度"""
     comment_parts = []
@@ -669,20 +632,28 @@ def _format_simplified_comment(
 
 
 def _create_fallback_comment(
-    file_reviews: List[Dict[str, Any]], enhanced_analysis: Dict[str, Any] = None
+        file_reviews: List[Union[FileReviewInfo, Dict[str, Any]]],
+        enhanced_analysis: Optional[Union[EnhancedAnalysis, Dict[str, Any]]] = None
 ) -> str:
     """创建极简的备用评论，确保能够发布"""
     parts = []
 
     # 基本统计
     total_files = len(file_reviews)
-    total_issues = sum(len(review.get("issues", [])) for review in file_reviews)
-    critical_issues = sum(
-        1
-        for review in file_reviews
-        for issue in review.get("issues", [])
-        if issue.get("severity") == "critical"
-    )
+    total_issues = 0
+    critical_issues = 0
+
+    for review in file_reviews:
+        if isinstance(review, FileReviewInfo):
+            total_issues += len(review.issues)
+            critical_issues += sum(1 for issue in review.issues if issue.severity == "critical")
+        else:
+            # 向后兼容字典格式
+            total_issues += len(review.get("issues", []))
+            critical_issues += sum(
+                1 for issue in review.get("issues", [])
+                if issue.get("severity") == "critical"
+            )
 
     parts.append("# 🔍 代码审查完成")
     parts.append("")
@@ -692,7 +663,10 @@ def _create_fallback_comment(
         parts.append(f"🚨 **严重问题**: {critical_issues} 个，请优先处理")
 
     if enhanced_analysis:
-        score = enhanced_analysis.get("overall_score", 80)
+        if isinstance(enhanced_analysis, EnhancedAnalysis):
+            score = enhanced_analysis.overall_score
+        else:
+            score = enhanced_analysis.get("overall_score", 80)
         parts.append(f"📈 **总体评分**: {score:.1f}/100")
 
     parts.append("")
@@ -702,9 +676,9 @@ def _create_fallback_comment(
 
 
 # 构建 LangGraph
-def build_code_review_graph():
+def build_code_review_graph() -> Any:
     """构建简化的代码审查 LangGraph"""
-    # 创建图
+    # 创建图 - 使用 AgentState 而不是 LangGraphState 以保持类型一致性
     workflow = StateGraph(AgentState)
 
     # 添加节点 - 简化的流程
@@ -726,7 +700,7 @@ def build_code_review_graph():
 
 # 运行代码审查
 async def _review_single_file_async(
-    file: Dict[str, Any], pr_info: Dict[str, Any]
+        file: FileInfo, pr_info: PRInfo
 ) -> Dict[str, Any]:
     """异步审查单个文件"""
     try:
@@ -737,8 +711,8 @@ async def _review_single_file_async(
 
         # 异步调用LLM
         response = await llm.ainvoke(prompt)
-        review_content = (
-            response.content if hasattr(response, "content") else str(response)
+        review_content = str(
+            response.content if hasattr(response, "content") else response
         )
 
         # 解析单文件审查结果
@@ -747,41 +721,9 @@ async def _review_single_file_async(
         return file_review
 
     except Exception as e:
-        logger.error(f"单文件审查失败 {file.get('filename', 'unknown')}: {e}")
+        logger.error(f"单文件审查失败 {file.filename}: {e}")
         return {
-            "filename": file.get("filename", "unknown"),
-            "score": 70,
-            "issues": [{"type": "error", "title": "审查异常", "description": str(e)}],
-            "positive_points": [],
-            "summary": f"审查异常: {str(e)}",
-        }
-
-
-def _review_single_file(
-    file: Dict[str, Any], pr_info: Dict[str, Any]
-) -> Dict[str, Any]:
-    """审查单个文件 - 保留同步版本用于向后兼容"""
-    try:
-        llm = get_llm()
-
-        # 构建单文件审查提示
-        prompt = _build_single_file_review_prompt(file, pr_info)
-
-        # 调用LLM
-        response = llm.invoke(prompt)
-        review_content = (
-            response.content if hasattr(response, "content") else str(response)
-        )
-
-        # 解析单文件审查结果
-        file_review = _parse_single_file_response(review_content, file)
-
-        return file_review
-
-    except Exception as e:
-        logger.error(f"单文件审查失败 {file.get('filename', 'unknown')}: {e}")
-        return {
-            "filename": file.get("filename", "unknown"),
+            "filename": file.filename,
             "score": 70,
             "issues": [{"type": "error", "title": "审查异常", "description": str(e)}],
             "positive_points": [],
@@ -790,21 +732,21 @@ def _review_single_file(
 
 
 def _build_single_file_review_prompt(
-    file: Dict[str, Any], pr_info: Dict[str, Any]
+        file: FileInfo, pr_info: PRInfo
 ) -> str:
     """构建单文件审查提示"""
-    filename = file.get("filename", "unknown")
-    status = file.get("status", "modified")
-    additions = file.get("additions", 0)
-    deletions = file.get("deletions", 0)
-    patch = _safe_get_string(file.get("patch", ""))
-    content = _safe_get_string(file.get("content", ""))
+    filename = file.filename
+    status = file.status
+    additions = file.additions
+    deletions = file.deletions
+    patch = _safe_get_string(file.patch)
+    content = _safe_get_string(file.content)
 
     prompt = f"""
 你是一个资深的代码审查专家。请对以下单个文件进行详细的代码审查。
 
 ## PR背景信息
-- 标题: {_safe_get_string(pr_info.get('title', ''))}
+- 标题: {_safe_get_string(pr_info.title)}
 - 作者: {_safe_get_user_login(pr_info)}
 
 ## 文件信息
@@ -858,7 +800,6 @@ def _build_single_file_review_prompt(
 ## 输出格式
 请严格按照以下JSON格式返回审查结果，确保JSON格式正确：
 
-```json
 {{
     "filename": "{filename}",
     "overall_score": 85,
@@ -884,7 +825,7 @@ def _build_single_file_review_prompt(
     ],
     "summary": "对该文件的总体评价和建议"
 }}
-```
+
 
 **重要提示**：
 1. 必须返回有效的JSON格式
@@ -897,12 +838,16 @@ def _build_single_file_review_prompt(
     return prompt
 
 
-def _parse_single_file_response(response: str, file: Dict[str, Any]) -> Dict[str, Any]:
+def _parse_single_file_response(response: str, file: Union[FileInfo, Dict[str, Any]]) -> Dict[str, Any]:
     """解析单文件审查响应"""
     import json
     import re
 
-    filename = file.get("filename", "unknown")
+    # 处理FileInfo对象或字典格式
+    if isinstance(file, FileInfo):
+        filename = file.filename
+    else:
+        filename = file.get("filename", "unknown")
 
     try:
         # 尝试提取JSON - 改进的正则表达式
@@ -928,13 +873,27 @@ def _parse_single_file_response(response: str, file: Dict[str, Any]) -> Dict[str
             if start != -1 and end > start:
                 json_str = response[start:end]
             else:
-                raise ValueError("未找到JSON格式")
+                # 没有找到 JSON 格式，直接使用正则表达式提取
+                logger.warning(f"未找到JSON格式，尝试使用正则表达式提取信息: {filename}")
+                result = _extract_info_with_regex(response, filename)
+                # 跳过 JSON 解析，直接进入验证阶段
+                json_str = None
 
-        # 清理 JSON 字符串
-        json_str = json_str.strip()
+        # 如果找到了 JSON 字符串，尝试解析
+        if json_str is not None:
+            # 清理 JSON 字符串
+            json_str = json_str.strip()
 
-        # 解析JSON
-        result = json.loads(json_str)
+            # 尝试修复常见的 JSON 格式问题
+            json_str = _fix_json_format(json_str)
+
+            # 解析JSON
+            try:
+                result = json.loads(json_str)
+            except json.JSONDecodeError:
+                # 如果 JSON 解析失败，尝试使用正则表达式提取关键信息
+                logger.warning(f"JSON解析失败，尝试使用正则表达式提取信息: {filename}")
+                result = _extract_info_with_regex(response, filename)
 
         # 确保必要字段存在
         issues = result.get("issues", [])
@@ -958,7 +917,7 @@ def _parse_single_file_response(response: str, file: Dict[str, Any]) -> Dict[str
 
         file_review = {
             "filename": filename,
-            "score": _safe_get_score(result.get("overall_score", 80)),
+            "score": _safe_get_score(result.get("overall_score", result.get("score", 80))),
             "code_quality_score": _safe_get_score(result.get("code_quality_score", 80)),
             "security_score": _safe_get_score(result.get("security_score", 80)),
             "business_score": _safe_get_score(result.get("business_score", 80)),
@@ -973,9 +932,15 @@ def _parse_single_file_response(response: str, file: Dict[str, Any]) -> Dict[str
 
         return file_review
 
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON解析失败 {filename}: {e}")
+        logger.error(f"错误位置: 行{e.lineno}, 列{e.colno}, 字符{e.pos}")
+        logger.debug(f"原始响应内容: {response[:1000]}...")  # 记录前1000字符用于调试
+        if 'json_str' in locals():
+            logger.debug(f"清理后的JSON: {json_str[:1000]}...")
     except Exception as e:
         logger.error(f"解析单文件响应失败 {filename}: {e}")
-        logger.debug(f"原始响应内容: {response[:500]}...")  # 记录前500字符用于调试
+        logger.debug(f"原始响应内容: {response[:1000]}...")  # 记录前1000字符用于调试
         # 返回默认结果
         return {
             "filename": filename,
@@ -998,6 +963,115 @@ def _parse_single_file_response(response: str, file: Dict[str, Any]) -> Dict[str
             "positive_points": ["文件已审查"],
             "summary": f"文件 {filename} 审查完成（解析失败，使用默认结果）",
         }
+
+
+def _fix_json_format(json_str: str) -> str:
+    """修复常见的 JSON 格式问题"""
+    import re
+
+    # 移除可能的 markdown 标记
+    json_str = re.sub(r'^```json\s*', '', json_str)
+    json_str = re.sub(r'\s*```$', '', json_str)
+    json_str = re.sub(r'^```\s*', '', json_str)
+
+    # 修复常见的 JSON 格式问题
+    # 1. 修复缺少逗号的问题 - 更精确的模式
+    # 在字符串值后面缺少逗号
+    json_str = re.sub(r'"\s*\n\s*"', '",\n    "', json_str)
+    # 在数字值后面缺少逗号
+    json_str = re.sub(r'(\d+)\s*\n\s*"', r'\1,\n    "', json_str)
+    # 在布尔值后面缺少逗号
+    json_str = re.sub(r'(true|false)\s*\n\s*"', r'\1,\n    "', json_str)
+    # 在数组后面缺少逗号
+    json_str = re.sub(r']\s*\n\s*"', '],\n    "', json_str)
+    # 在对象后面缺少逗号
+    json_str = re.sub(r'}\s*\n\s*"', '},\n    "', json_str)
+
+    # 2. 修复多余的逗号
+    json_str = re.sub(r',\s*}', '}', json_str)
+    json_str = re.sub(r',\s*]', ']', json_str)
+
+    # 3. 修复不完整的 JSON（如果以逗号结尾，尝试补全）
+    json_str = json_str.strip()
+    if json_str.endswith(','):
+        json_str = json_str[:-1]
+
+    # 4. 如果 JSON 不完整，尝试补全
+    if json_str.count('{') > json_str.count('}'):
+        json_str += '}' * (json_str.count('{') - json_str.count('}'))
+    if json_str.count('[') > json_str.count(']'):
+        json_str += ']' * (json_str.count('[') - json_str.count(']'))
+
+    return json_str
+
+
+def _extract_info_with_regex(response: str, filename: str) -> Dict[str, Any]:
+    """使用正则表达式从响应中提取关键信息，作为 JSON 解析失败的备用方案"""
+    import re
+
+    result = {
+        "filename": filename,
+        "overall_score": 75,
+        "code_quality_score": 75,
+        "security_score": 75,
+        "business_score": 75,
+        "performance_score": 75,
+        "best_practices_score": 75,
+        "issues": [],
+        "positive_points": [],
+        "summary": f"文件 {filename} 审查完成（使用正则表达式解析）"
+    }
+
+    try:
+        # 提取评分
+        score_patterns = [
+            (r'"overall_score":\s*(\d+)', 'overall_score'),
+            (r'"code_quality_score":\s*(\d+)', 'code_quality_score'),
+            (r'"security_score":\s*(\d+)', 'security_score'),
+            (r'"business_score":\s*(\d+)', 'business_score'),
+            (r'"performance_score":\s*(\d+)', 'performance_score'),
+            (r'"best_practices_score":\s*(\d+)', 'best_practices_score'),
+        ]
+
+        for pattern, key in score_patterns:
+            match = re.search(pattern, response)
+            if match:
+                result[key] = int(match.group(1))
+
+        # 提取总结
+        summary_match = re.search(r'"summary":\s*"([^"]*)"', response)
+        if summary_match:
+            result["summary"] = summary_match.group(1)
+
+        # 提取问题（简化版）
+        issues = []
+        issue_pattern = r'"title":\s*"([^"]*)".*?"description":\s*"([^"]*)"'
+        issue_matches = re.findall(issue_pattern, response, re.DOTALL)
+
+        for title, description in issue_matches:
+            issues.append({
+                "type": "info",
+                "title": title,
+                "description": description,
+                "severity": "info",
+                "category": "other",
+                "suggestion": ""
+            })
+
+        result["issues"] = issues
+
+        # 提取积极点
+        positive_pattern = r'"positive_points":\s*\[(.*?)\]'
+        positive_match = re.search(positive_pattern, response, re.DOTALL)
+        if positive_match:
+            positive_content = positive_match.group(1)
+            positive_points = re.findall(r'"([^"]*)"', positive_content)
+            result["positive_points"] = positive_points
+
+    except Exception as e:
+        logger.warning(f"正则表达式提取也失败: {e}")
+
+    return result
 
 
 def _safe_get_score(score: Any) -> int:
@@ -1031,33 +1105,33 @@ def _calculate_overall_scores(file_reviews: List[Dict[str, Any]]) -> Dict[str, A
     total_files = len(file_reviews)
 
     avg_code_quality = (
-        sum(_safe_get_score(fr.get("code_quality_score", 80)) for fr in file_reviews)
-        / total_files
+            sum(_safe_get_score(fr.get("code_quality_score", 80)) for fr in file_reviews)
+            / total_files
     )
     avg_security = (
-        sum(_safe_get_score(fr.get("security_score", 80)) for fr in file_reviews)
-        / total_files
+            sum(_safe_get_score(fr.get("security_score", 80)) for fr in file_reviews)
+            / total_files
     )
     avg_business = (
-        sum(_safe_get_score(fr.get("business_score", 80)) for fr in file_reviews)
-        / total_files
+            sum(_safe_get_score(fr.get("business_score", 80)) for fr in file_reviews)
+            / total_files
     )
     avg_performance = (
-        sum(_safe_get_score(fr.get("performance_score", 80)) for fr in file_reviews)
-        / total_files
+            sum(_safe_get_score(fr.get("performance_score", 80)) for fr in file_reviews)
+            / total_files
     )
     avg_best_practices = (
-        sum(_safe_get_score(fr.get("best_practices_score", 80)) for fr in file_reviews)
-        / total_files
+            sum(_safe_get_score(fr.get("best_practices_score", 80)) for fr in file_reviews)
+            / total_files
     )
 
     # 计算总体评分（加权平均）
     overall_score = (
-        avg_code_quality * 0.25
-        + avg_security * 0.25
-        + avg_business * 0.25
-        + avg_performance * 0.125
-        + avg_best_practices * 0.125
+            avg_code_quality * 0.25
+            + avg_security * 0.25
+            + avg_business * 0.25
+            + avg_performance * 0.125
+            + avg_best_practices * 0.125
     )
 
     # 统计问题数量（使用安全的评分获取）
@@ -1083,14 +1157,20 @@ def _calculate_overall_scores(file_reviews: List[Dict[str, Any]]) -> Dict[str, A
     }
 
 
-def _safe_get_user_login(pr_info: Dict[str, Any]) -> str:
+def _safe_get_user_login(pr_info: Union[PRInfo, Dict[str, Any]]) -> str:
     """安全地获取用户登录名"""
     try:
-        user = pr_info.get("user", "")
-        if isinstance(user, dict):
-            return user.get("login", "unknown")
-        elif isinstance(user, str):
-            return user
+        if isinstance(pr_info, PRInfo):
+            return pr_info.author.login
+        elif isinstance(pr_info, dict):
+            # 向后兼容旧的字典格式
+            user = pr_info.get("user", "")
+            if isinstance(user, dict):
+                return str(user.get("login", "unknown"))
+            elif isinstance(user, str):
+                return user
+            else:
+                return "unknown"
         else:
             return "unknown"
     except Exception as e:
@@ -1105,122 +1185,6 @@ def _safe_get_string(data: Any, default: str = "") -> str:
     return str(data)
 
 
-def _build_comprehensive_review_prompt(
-    pr_info: Dict[str, Any], files: List[Dict[str, Any]]
-) -> str:
-    """构建综合审查提示"""
-
-    # 构建文件信息
-    files_info = []
-    for file in files:
-        file_info = f"""
-## 文件: {file.get('filename', 'unknown')}
-- 状态: {file.get('status', 'unknown')}
-- 新增行数: {file.get('additions', 0)}
-- 删除行数: {file.get('deletions', 0)}
-
-### 变更内容 (diff):
-```diff
-{_safe_get_string(file.get('patch', '无diff信息'))[:1000]}...
-```
-
-### 完整文件内容:
-```
-{_safe_get_string(file.get('content', '无法获取文件内容'))[:2000]}...
-```
-"""
-        files_info.append(file_info)
-
-    files_text = "\n".join(files_info)
-
-    prompt = f"""
-你是一个资深的代码审查专家。请对以下PR进行全面的代码审查。
-
-## PR信息
-- 标题: {_safe_get_string(pr_info.get('title', ''))}
-- 描述: {_safe_get_string(pr_info.get('body', ''))[:500]}...
-- 作者: {_safe_get_user_login(pr_info)}
-
-## 代码文件分析
-{files_text}
-
-## 审查要求
-请从以下维度对每个文件进行审查：
-1. **代码质量**: 可读性、可维护性、复杂度
-2. **安全性**: 潜在安全漏洞、输入验证
-3. **业务逻辑**: 逻辑正确性、边界条件处理
-4. **性能**: 算法效率、资源使用
-5. **最佳实践**: 编码规范、设计模式
-
-## 输出格式
-请以JSON格式返回审查结果：
-```json
-{{
-    "overall_score": 85,
-    "code_quality_score": 80,
-    "security_score": 90,
-    "business_score": 85,
-    "file_reviews": [
-        {{
-            "filename": "src/main.py",
-            "score": 85,
-            "issues": [
-                {{
-                    "type": "warning",
-                    "title": "函数复杂度过高",
-                    "description": "process_data函数包含过多逻辑分支",
-                    "line": 45,
-                    "suggestion": "建议拆分为多个小函数"
-                }}
-            ],
-            "positive_points": ["良好的错误处理", "清晰的变量命名"]
-        }}
-    ],
-    "summary": "整体代码质量良好，建议优化函数复杂度"
-}}
-```
-
-请确保返回有效的JSON格式。
-"""
-    return prompt
-
-
-# 旧的解析函数已移动到 output_parser.py 中
-
-
-def _fallback_simple_review(state: AgentState) -> AgentState:
-    """降级到简单审查"""
-    files = state["files"]
-
-    file_reviews = []
-    for file in files:
-        file_reviews.append(
-            {
-                "filename": file["filename"],
-                "score": 80,
-                "issues": [],
-                "positive_points": ["简单审查完成"],
-            }
-        )
-
-    return {
-        **state,
-        "file_reviews": file_reviews,
-        "overall_summary": "使用简单审查模式完成",
-        "enhanced_analysis": {
-            "overall_score": 80,
-            "code_quality_score": 80,
-            "security_score": 80,
-            "business_score": 80,
-            "file_results": file_reviews,
-            "summary": "使用简单审查模式完成",
-            "standards_passed": len(files) * 3,  # 估算
-            "standards_failed": len(files) * 2,  # 估算
-            "standards_total": len(files) * 5,
-        },
-    }
-
-
 async def run_code_review_async(pr_info: Dict[str, Any]) -> Dict[str, Any]:
     """异步运行代码审查
 
@@ -1233,22 +1197,109 @@ async def run_code_review_async(pr_info: Dict[str, Any]) -> Dict[str, Any]:
     # 构造工作流
     graph = build_code_review_graph()
 
+    # 解析作者信息
+    author_data = pr_info.get("author", {})
+    if isinstance(author_data, dict):
+        author = UserInfo(**author_data)
+    else:
+        author = UserInfo(login="unknown")
+
+    # 创建PR信息模型
+    pr_info_model = PRInfo(
+        repo=pr_info["repo"],
+        number=pr_info["number"],
+        platform=pr_info.get("platform", "github"),
+        author=author,
+        title=pr_info.get("title", ""),
+        body=pr_info.get("body", ""),
+        head_sha=pr_info.get("head_sha", ""),
+        base_sha=pr_info.get("base_sha", ""),
+        repo_full_name=pr_info.get("repo_full_name", pr_info["repo"])
+    )
+
     # 初始状态
-    initial_state = {
-        "messages": [],
-        "pr_info": pr_info,
-        "files": [],
-        "file_contents": {},
-        "current_file_index": 0,
-        "file_reviews": [],
-        "overall_summary": None,
-        "enhanced_analysis": None,
-        "db_record_id": None,
-    }
+    initial_state = AgentState(
+        pr_info=pr_info_model
+    )
 
     # 异步执行图
     result = await graph.ainvoke(initial_state)
-    return result
+
+    # 转换结果为字典格式以保持向后兼容
+    return _convert_state_to_dict(result)
+
+
+def _convert_state_to_dict(state: Union[AgentState, Dict[str, Any]]) -> Dict[str, Any]:
+    """将AgentState或字典状态转换为字典格式以保持向后兼容"""
+    # 处理 LangGraph 返回的 AddableValuesDict 或其他字典类型
+    if isinstance(state, dict):
+        # 如果是字典类型，直接使用
+        file_reviews_data = state.get("file_reviews", [])
+        enhanced_analysis_data = state.get("enhanced_analysis")
+        pr_info_data = state.get("pr_info", {})
+        files_data = state.get("files", [])
+        file_contents_data = state.get("file_contents", {})
+        overall_summary_data = state.get("overall_summary")
+        db_record_id_data = state.get("db_record_id")
+    else:
+        # 如果是 AgentState 对象
+        file_reviews_data = state.file_reviews
+        enhanced_analysis_data = state.enhanced_analysis
+        pr_info_data = state.pr_info
+        files_data = state.files
+        file_contents_data = state.file_contents
+        overall_summary_data = state.overall_summary
+        db_record_id_data = state.db_record_id
+
+    file_reviews = []
+    for review in file_reviews_data:
+        if isinstance(review, FileReviewInfo):
+            file_reviews.append({
+                "filename": review.filename,
+                "score": review.score,
+                "code_quality_score": review.code_quality_score,
+                "security_score": review.security_score,
+                "business_score": review.business_score,
+                "performance_score": review.performance_score,
+                "best_practices_score": review.best_practices_score,
+                "issues": [issue.model_dump() for issue in review.issues],
+                "positive_points": review.positive_points,
+                "summary": review.summary,
+            })
+        else:
+            file_reviews.append(review)
+
+    # 处理增强分析数据
+    enhanced_analysis = None
+    if enhanced_analysis_data:
+        if hasattr(enhanced_analysis_data, 'model_dump'):
+            enhanced_analysis = enhanced_analysis_data.model_dump()
+        else:
+            enhanced_analysis = enhanced_analysis_data
+
+    # 处理 PR 信息数据
+    if hasattr(pr_info_data, 'model_dump'):
+        pr_info_dict = pr_info_data.model_dump()
+    else:
+        pr_info_dict = pr_info_data
+
+    # 处理文件数据
+    files_list = []
+    for f in files_data:
+        if hasattr(f, 'model_dump'):
+            files_list.append(f.model_dump())
+        else:
+            files_list.append(f)
+
+    return {
+        "pr_info": pr_info_dict,
+        "files": files_list,
+        "file_contents": file_contents_data,
+        "file_reviews": file_reviews,
+        "overall_summary": overall_summary_data,
+        "enhanced_analysis": enhanced_analysis,
+        "db_record_id": db_record_id_data,
+    }
 
 
 def run_code_review(pr_info: Dict[str, Any]) -> Dict[str, Any]:

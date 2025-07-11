@@ -3,9 +3,10 @@ Celery 任务定义模块。
 """
 
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from pulse_guard.agent.graph import run_code_review
+from pulse_guard.models.workflow import UserInfo, WorkflowInput
 from pulse_guard.worker.celery_app import celery_app
 
 # 配置日志
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
     bind=True, max_retries=3, name="pulse_guard.worker.tasks.process_pull_request"
 )
 def process_pull_request(
-    self, repo: str, pr_number: int, platform: str = "github"
+    self, repo: str, pr_number: int, platform: str = "github", author_info: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """处理 Pull Request
 
@@ -24,21 +25,35 @@ def process_pull_request(
         repo: 仓库名称，格式为 "owner/repo"
         pr_number: Pull Request 编号
         platform: 平台名称，"github" 或 "gitee"
+        author_info: 作者信息字典
 
     Returns:
         处理结果
-        :param platform: 平台名称
-        :param pr_number: PR 编号
-        :param repo: 仓库
-        :param self: 自身
     """
     try:
-        logger.info(f"Processing PR #{pr_number} from {repo}")
+        # 解析作者信息
+        author = None
+        if author_info:
+            try:
+                author = UserInfo(**author_info)
+                logger.info(f"Processing PR #{pr_number} from {repo} by {author.login}")
+            except Exception as e:
+                logger.warning(f"解析作者信息失败: {e}")
+                author = UserInfo(login="unknown")
+        else:
+            logger.info(f"Processing PR #{pr_number} from {repo}")
+            author = UserInfo(login="unknown")
+
+        # 创建工作流输入
+        workflow_input = WorkflowInput(
+            repo=repo,
+            number=pr_number,
+            platform=platform,
+            author=author
+        )
 
         # 运行代码审查 - 使用简化工作流
-        result = run_code_review(
-            {"repo": repo, "number": pr_number, "platform": platform}
-        )
+        result = run_code_review(workflow_input.model_dump())
 
         logger.info(f"Completed review for PR #{pr_number} from {repo}")
 

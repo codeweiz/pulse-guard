@@ -31,13 +31,19 @@ async def gitee_webhook(request: Request):
 @router.post("/review")
 async def manual_review(repo: str, pr_number: int, platform: str = "github"):
     """手动触发代码审查"""
-    # 启动异步任务
-    task = process_pull_request.delay(repo=repo, pr_number=pr_number, platform=platform)
+    # 启动异步任务 - 手动触发时没有作者信息
+    task = process_pull_request.delay(
+        repo=repo,
+        pr_number=pr_number,
+        platform=platform,
+        author_info=None
+    )
 
     return {
         "status": "success",
-        "message": f"Processing PR #{pr_number} from {repo}",
+        "message": f"Manual review started for PR #{pr_number} from {repo}",
         "task_id": task.id,
+        "platform": platform,
     }
 
 
