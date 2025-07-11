@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from pulse_guard.api.routes import router as api_router
+from backend.api.routes import router as api_router
 
 # 配置日志
 logging.basicConfig(
@@ -19,8 +19,8 @@ logging.basicConfig(
 )
 
 # 设置特定模块的日志级别
-logging.getLogger("pulse_guard.api.webhook").setLevel(logging.DEBUG)
-logging.getLogger("pulse_guard.tools.github").setLevel(logging.DEBUG)
+logging.getLogger("backend.api.webhook").setLevel(logging.DEBUG)
+logging.getLogger("backend.tools.github").setLevel(logging.DEBUG)
 
 # 降低一些库的日志级别，避免日志过多
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -64,4 +64,4 @@ async def root() -> Dict[str, Any]:
 
 
 if __name__ == "__main__":
-    uvicorn.run("pulse_guard.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)

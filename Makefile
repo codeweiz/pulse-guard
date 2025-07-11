@@ -37,7 +37,7 @@ test:
 
 # 运行 Web 服务
 run-backend:
-	uv run uvicorn pulse_guard.main:app --host 0.0.0.0 --port 8000 --reload
+	uv run uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 
 # 运行前端
 run-frontend:
@@ -45,7 +45,7 @@ run-frontend:
 
 # 运行 Celery Worker
 worker:
-	uv run celery -A pulse_guard.worker.celery_app worker --loglevel=info
+	uv run celery -A backend.worker.celery_app worker --loglevel=info
 
 # Docker 相关命令
 docker-build:

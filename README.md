@@ -20,7 +20,7 @@
 ## 项目结构
 
 ```
-pulse_guard/
+backend/
 ├── __init__.py
 ├── api/                # API 相关模块
 │   ├── __init__.py
@@ -164,7 +164,7 @@ make demo
 uv sync
 
 # 启动 Web 服务
-uv run uvicorn pulse_guard.main:app --host 0.0.0.0 --port 8000
+uv run uvicorn backend.main:app --host 0.0.0.0 --port 8000
 
 # 启动 Celery Worker
 uv run python celery_worker.py

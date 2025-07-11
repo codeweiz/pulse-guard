@@ -4,10 +4,10 @@ API 路由定义模块。
 
 from fastapi import APIRouter, Request
 
-from pulse_guard.api.analytics import router as analytics_router
-from pulse_guard.api.gitee_webhook import handle_webhook as handle_gitee_webhook
-from pulse_guard.api.github_webhook import handle_webhook as handle_github_webhook
-from pulse_guard.worker.tasks import process_pull_request
+from backend.api.analytics import router as analytics_router
+from backend.api.gitee_webhook import handle_webhook as handle_gitee_webhook
+from backend.api.github_webhook import handle_webhook as handle_github_webhook
+from backend.worker.tasks import process_pull_request
 
 # 创建路由器
 router = APIRouter()

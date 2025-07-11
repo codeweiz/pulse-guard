@@ -94,7 +94,7 @@ class DatabaseConfig(BaseModel):
 
     url: str = Field(
         default=toml_config.get("database", {}).get(
-            "url", "sqlite:///./pulse_guard.db"
+            "url", "sqlite:///./backend.db"
         ),
         description="数据库URL",
     )

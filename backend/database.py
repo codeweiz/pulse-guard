@@ -21,7 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, relationship, sessionmaker
 
-from pulse_guard.config import config
+from backend.config import config
 
 # 创建数据库引擎
 engine = create_engine(
@@ -204,40 +204,6 @@ class StandardCheckRecord(Base):
         return f"<StandardCheckRecord(standard_id={self.standard_id}, passed={self.passed})>"
 
 
-class ReviewMetrics(Base):
-    """审查指标统计表"""
-
-    __tablename__ = "review_metrics"
-
-    id = Column(Integer, primary_key=True, index=True)
-
-    # 统计维度
-    repo_full_name = Column(String(255), index=True)
-    date = Column(DateTime, index=True)
-    period_type = Column(String(20), default="daily")  # daily, weekly, monthly
-
-    # 统计数据
-    total_reviews = Column(Integer, default=0)
-    avg_score = Column(Float, default=0.0)
-    total_issues = Column(Integer, default=0)
-    critical_issues = Column(Integer, default=0)
-
-    # 规范通过率
-    standards_pass_rate = Column(Float, default=0.0)
-
-    # 分类统计
-    security_issues = Column(Integer, default=0)
-    quality_issues = Column(Integer, default=0)
-    business_issues = Column(Integer, default=0)
-
-    # 时间戳
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    def __repr__(self):
-        return f"<ReviewMetrics(repo={self.repo_full_name}, date={self.date})>"
-
-
 def get_db() -> Session:
     """获取数据库会话"""
     db = SessionLocal()
@@ -263,12 +229,12 @@ class DatabaseManager:
 
     @staticmethod
     def save_pr_review(
-        repo_full_name: str,
-        pr_number: int,
-        pr_title: str,
-        pr_description: str,
-        pr_author: str,
-        platform: str = "github",
+            repo_full_name: str,
+            pr_number: int,
+            pr_title: str,
+            pr_description: str,
+            pr_author: str,
+            platform: str = "github",
     ) -> PRReviewRecord:
         """保存PR审查记录"""
         db = get_db()
@@ -290,14 +256,14 @@ class DatabaseManager:
 
     @staticmethod
     def update_pr_review_scores(
-        pr_review_id: int,
-        overall_score: float,
-        business_score: float,
-        code_quality_score: float,
-        security_score: float,
-        standards_passed: int,
-        standards_failed: int,
-        standards_total: int,
+            pr_review_id: int,
+            overall_score: float,
+            business_score: float,
+            code_quality_score: float,
+            security_score: float,
+            standards_passed: int,
+            standards_failed: int,
+            standards_total: int,
     ):
         """更新PR审查评分"""
         db = get_db()
@@ -322,7 +288,7 @@ class DatabaseManager:
 
     @staticmethod
     def get_pr_review_history(
-        repo_full_name: str, limit: int = 50
+            repo_full_name: str, limit: int = 50
     ) -> List[PRReviewRecord]:
         """获取PR审查历史"""
         db = get_db()
@@ -373,13 +339,13 @@ class DatabaseManager:
 
     @staticmethod
     def save_complete_review_result(
-        repo_full_name: str,
-        pr_number: int,
-        pr_title: str,
-        pr_description: str,
-        pr_author: str,
-        platform: str,
-        review_result: Dict[str, Any],
+            repo_full_name: str,
+            pr_number: int,
+            pr_title: str,
+            pr_description: str,
+            pr_author: str,
+            platform: str,
+            review_result: Dict[str, Any],
     ) -> int:
         """保存完整的审查结果到数据库
 

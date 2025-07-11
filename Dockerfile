@@ -67,7 +67,7 @@ EXPOSE 8000
 # 健康检查（优化超时时间）
 HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=3 \
     CMD if [ "$SERVICE_TYPE" = "worker" ]; then \
-        timeout 10 python -c "from pulse_guard.worker.celery_app import celery_app; celery_app.control.inspect().ping()" 2>/dev/null; \
+        timeout 10 python -c "from backend.worker.celery_app import celery_app; celery_app.control.inspect().ping()" 2>/dev/null; \
     else \
         curl -f --max-time 10 http://localhost:8000/api/health 2>/dev/null; \
     fi || exit 1

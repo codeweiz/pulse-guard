@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import gradio as gr
 import pandas as pd
 
-from pulse_guard.database import (
+from backend.database import (
     FileReviewRecord,
     IssueRecord,
     PRReviewRecord,
@@ -90,7 +90,7 @@ class PRReviewApp:
             close_db(db)
 
     def get_pr_detail(
-        self, pr_review_id: int
+            self, pr_review_id: int
     ) -> Tuple[str, pd.DataFrame, pd.DataFrame]:
         """获取PR审查详情"""
         if not pr_review_id:
@@ -254,8 +254,8 @@ class PRReviewApp:
 
             for platform in platform_stats:
                 platform_stats[platform]["avg_score"] = (
-                    platform_stats[platform]["total_score"]
-                    / platform_stats[platform]["count"]
+                        platform_stats[platform]["total_score"]
+                        / platform_stats[platform]["count"]
                 )
 
             # 评分分布
@@ -309,7 +309,7 @@ class PRReviewApp:
             close_db(db)
 
     def search_issues(
-        self, keyword: str = "", severity: str = "all", limit: int = 100
+            self, keyword: str = "", severity: str = "all", limit: int = 100
     ) -> pd.DataFrame:
         """搜索问题记录"""
         db = get_db()
@@ -381,7 +381,7 @@ def create_interface():
     app = PRReviewApp()
 
     with gr.Blocks(
-        title="AI PR代码审查结果可视化系统", theme=gr.themes.Soft()
+            title="AI PR代码审查结果可视化系统", theme=gr.themes.Soft()
     ) as interface:
         gr.Markdown("# 🔍 AI PR代码审查结果可视化系统")
         gr.Markdown("查看和分析AI代码审查结果，包括PR评分、问题统计、文件分析等")
@@ -498,7 +498,7 @@ def create_interface():
 
 if __name__ == "__main__":
     # 初始化数据库
-    from pulse_guard.database import init_database
+    from backend.database import init_database
 
     init_database()
 

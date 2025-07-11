@@ -8,8 +8,8 @@ from typing import Any
 from fastapi import Request
 from starlette.responses import JSONResponse
 
-from pulse_guard.models.workflow import UserInfo, WorkflowInput
-from pulse_guard.worker.tasks import process_pull_request
+from backend.models.workflow import UserInfo, WorkflowInput
+from backend.worker.tasks import process_pull_request
 
 # 配置日志
 logger = logging.getLogger(__name__)

@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from pulse_guard.database import DatabaseManager, PRReviewRecord, close_db, get_db
+from backend.database import DatabaseManager, PRReviewRecord, close_db, get_db
 
 logger = logging.getLogger(__name__)
 

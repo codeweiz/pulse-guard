@@ -36,7 +36,7 @@ services:
     depends_on:
       - redis
     healthcheck:
-      test: ["CMD", "python", "-c", "from pulse_guard.worker.celery_app import celery_app; print('Worker is running')"]
+      test: ["CMD", "python", "-c", "from backend.worker.celery_app import celery_app; print('Worker is running')"]
       interval: 30s
       timeout: 10s
       retries: 3

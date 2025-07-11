@@ -7,7 +7,7 @@ from typing import Optional
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 
-from pulse_guard.config import config
+from backend.config import config
 
 
 def get_llm(

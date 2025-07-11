@@ -15,12 +15,12 @@ echo "=========================="
 case "$SERVICE_TYPE" in
     web)
         echo "启动 Web 服务..."
-        exec uvicorn pulse_guard.main:app --host 0.0.0.0 --port 8000
+        exec uvicorn backend.main:app --host 0.0.0.0 --port 8000
         ;;
     worker)
         echo "启动 Worker 服务..."
         echo "启动 Celery Worker..."
-        exec celery -A pulse_guard.worker.celery_app worker --loglevel=info
+        exec celery -A backend.worker.celery_app worker --loglevel=info
         ;;
     *)
         echo "未知服务类型: $SERVICE_TYPE"

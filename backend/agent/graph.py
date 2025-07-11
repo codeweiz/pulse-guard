@@ -2,15 +2,15 @@ import asyncio
 import logging
 from typing import Any, Dict, List, Optional, Union
 from langgraph.graph import END, StateGraph
-from pulse_guard.llm.client import get_llm
-from pulse_guard.models.review import (
+from backend.llm.client import get_llm
+from backend.models.review import (
     CodeIssue,
     FileReview,
     IssueCategory,
     PRReview,
     SeverityLevel,
 )
-from pulse_guard.models.workflow import (
+from backend.models.workflow import (
     AgentState,
     CodeIssueInfo,
     EnhancedAnalysis,
@@ -19,8 +19,8 @@ from pulse_guard.models.workflow import (
     PRInfo,
     UserInfo,
 )
-from pulse_guard.platforms import get_platform_provider
-from pulse_guard.utils.file_type_utils import is_code_file
+from backend.platforms import get_platform_provider
+from backend.utils.file_type_utils import is_code_file
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -329,7 +329,7 @@ def post_review_comment(state: AgentState) -> AgentState:
 
     # 首先保存审查结果到数据库
     try:
-        from pulse_guard.database import DatabaseManager
+        from backend.database import DatabaseManager
 
         db_record_id = DatabaseManager.save_complete_review_result(
             repo_full_name=pr_info.repo_full_name,

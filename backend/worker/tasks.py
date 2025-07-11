@@ -5,16 +5,16 @@ Celery 任务定义模块。
 import logging
 from typing import Any, Dict, Optional
 
-from pulse_guard.agent.graph import run_code_review
-from pulse_guard.models.workflow import UserInfo, WorkflowInput
-from pulse_guard.worker.celery_app import celery_app
+from backend.agent.graph import run_code_review
+from backend.models.workflow import UserInfo, WorkflowInput
+from backend.worker.celery_app import celery_app
 
 # 配置日志
 logger = logging.getLogger(__name__)
 
 
 @celery_app.task(
-    bind=True, max_retries=3, name="pulse_guard.worker.tasks.process_pull_request"
+    bind=True, max_retries=3, name="backend.worker.tasks.process_pull_request"
 )
 def process_pull_request(
     self, repo: str, pr_number: int, platform: str = "github", author_info: Optional[Dict[str, Any]] = None
