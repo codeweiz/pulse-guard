@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 
 import httpx
 
-from ..config import config
+from backend.config.toml_config import toml_config
 from ..models.github import GitHubFile, PullRequest, ReviewComment
 from .base import PlatformProvider
 from .factory import register_platform
@@ -24,8 +24,8 @@ class GitHubProvider(PlatformProvider):
     def __init__(self, platform_name: str):
         super().__init__(platform_name)
         # 初始化 GitHub API 客户端配置
-        self.token = config.github.token
-        self.api_base_url = config.github.api_base_url
+        self.token = toml_config.github.token
+        self.api_base_url = toml_config.github.api_base_url
         self.headers = {
             "Accept": "application/vnd.github.v3+json",
             "Authorization": f"token {self.token}",

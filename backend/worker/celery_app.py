@@ -4,10 +4,10 @@ Celery 应用配置模块。
 
 from celery import Celery
 
-from backend.config import config
+from backend.config.toml_config import toml_config
 
 # 创建 Celery 应用
-celery_app = Celery("backend", broker=config.redis.url, backend=config.redis.url)
+celery_app = Celery("backend", broker=toml_config.redis.url, backend=toml_config.redis.url)
 
 # 配置 Celery
 celery_app.conf.update(

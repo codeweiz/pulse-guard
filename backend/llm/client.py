@@ -7,7 +7,7 @@ from typing import Optional
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 
-from backend.config import config
+from backend.config.toml_config import toml_config
 
 
 def get_llm(
@@ -29,10 +29,10 @@ def get_llm(
     Returns:
         LLM 客户端
     """
-    provider = provider or config.llm.provider
-    model_name = model_name or config.llm.model_name
-    base_url = base_url or config.llm.base_url
-    api_key = api_key or config.llm.api_key
+    provider = provider or toml_config.llm.provider
+    model_name = model_name or toml_config.llm.model_name
+    base_url = base_url or toml_config.llm.base_url
+    api_key = api_key or toml_config.llm.api_key
 
     # 使用 LangChain 的工厂函数初始化 LLM
     return init_chat_model(

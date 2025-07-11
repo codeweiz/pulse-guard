@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 
 import requests
 
-from ..config import config
+from backend.config.toml_config import toml_config
 from ..models.gitee import GiteeFile, PullRequest, ReviewComment
 from .base import PlatformProvider
 from .factory import register_platform
@@ -24,8 +24,8 @@ class GiteeProvider(PlatformProvider):
     def __init__(self, platform_name: str):
         super().__init__(platform_name)
         # 初始化 Gitee API 客户端配置
-        self.api_base_url = config.gitee.api_base_url
-        self.access_token = config.gitee.access_token
+        self.api_base_url = toml_config.gitee.api_base_url
+        self.access_token = toml_config.gitee.access_token
         self.session = requests.Session()
         self.session.headers.update(
             {"Content-Type": "application/json", "Accept": "application/json"}

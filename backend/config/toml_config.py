@@ -1,7 +1,6 @@
 """
 配置管理模块，负责加载和提供应用配置。
 """
-
 import os
 from pathlib import Path
 
@@ -13,29 +12,29 @@ from pydantic import BaseModel, Field
 load_dotenv()
 
 # 项目根目录
-ROOT_DIR = Path(__file__).parent.parent
+ROOT_DIR = Path(__file__).parent.parent.parent
 
 # 加载 TOML 配置
 try:
     with open(ROOT_DIR / "config.toml", "rb") as f:
-        toml_config = tomli.load(f)
+        _toml_config = tomli.load(f)
 except FileNotFoundError:
-    toml_config = {"llm": {}, "github": {}, "gitee": {}, "review": {}}
+    _toml_config = {"llm": {}, "github": {}, "gitee": {}, "review": {}}
 
 
 class LLMConfig(BaseModel):
     """LLM 配置"""
 
     provider: str = Field(
-        default=toml_config.get("llm", {}).get("provider", "deepseek"),
+        default=_toml_config.get("llm", {}).get("provider", "deepseek"),
         description="LLM 提供者",
     )
     model_name: str = Field(
-        default=toml_config.get("llm", {}).get("model_name", "deepseek-coder"),
+        default=_toml_config.get("llm", {}).get("model_name", "deepseek-coder"),
         description="LLM 模型名称",
     )
     base_url: str = Field(
-        default=toml_config.get("llm", {}).get(
+        default=_toml_config.get("llm", {}).get(
             "base_url", "http://192.168.220.15:11434"
         ),
         description="基础 URL",
@@ -50,7 +49,7 @@ class GitHubConfig(BaseModel):
     """GitHub 配置"""
 
     api_base_url: str = Field(
-        default=toml_config.get("github", {}).get(
+        default=_toml_config.get("github", {}).get(
             "api_base_url", "https://api.github.com"
         ),
         description="GitHub API 基础 URL",
@@ -63,20 +62,11 @@ class GitHubConfig(BaseModel):
     )
 
 
-class RedisConfig(BaseModel):
-    """Redis 配置"""
-
-    url: str = Field(
-        default=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
-        description="Redis URL",
-    )
-
-
 class GiteeConfig(BaseModel):
     """Gitee 配置"""
 
     api_base_url: str = Field(
-        default=toml_config.get("gitee", {}).get(
+        default=_toml_config.get("gitee", {}).get(
             "api_base_url", "https://gitee.com/api/v5"
         ),
         description="Gitee API 基础 URL",
@@ -89,22 +79,31 @@ class GiteeConfig(BaseModel):
     )
 
 
+class RedisConfig(BaseModel):
+    """Redis 配置"""
+
+    url: str = Field(
+        default=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
+        description="Redis URL",
+    )
+
+
 class DatabaseConfig(BaseModel):
     """数据库配置"""
 
     url: str = Field(
-        default=toml_config.get("database", {}).get(
+        default=_toml_config.get("database", {}).get(
             "url", "sqlite:///./backend.db"
         ),
         description="数据库URL",
     )
     echo: bool = Field(
-        default=toml_config.get("database", {}).get("echo", True),
+        default=_toml_config.get("database", {}).get("echo", True),
         description="是否显示SQL语句",
     )
 
 
-class Config(BaseModel):
+class TomlConfig(BaseModel):
     """应用配置"""
 
     llm: LLMConfig = Field(default_factory=LLMConfig)
@@ -115,4 +114,4 @@ class Config(BaseModel):
 
 
 # 全局配置实例
-config = Config()
+toml_config = TomlConfig()

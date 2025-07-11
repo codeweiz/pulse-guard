@@ -1,7 +1,6 @@
 """
 数据库配置和模型定义模块。
 """
-
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List
@@ -21,12 +20,12 @@ from sqlalchemy import (
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, relationship, sessionmaker
 
-from backend.config import config
+from backend.config.toml_config import toml_config
 
 # 创建数据库引擎
 engine = create_engine(
-    config.database.url,
-    echo=config.database.echo,
+    url=toml_config.database.url,
+    echo=toml_config.database.echo,
     pool_pre_ping=True,
 )
 
