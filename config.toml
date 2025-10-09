@@ -17,9 +17,11 @@ api_base_url = "https://api.github.com"
 [gitee]
 api_base_url = "https://gitee.com/api/v5"
 
+[gitea]
+api_base_url = "http://192.168.110.46:3000/api/v1"
+
 [database]
 # 数据库配置
-# url = "sqlite:///./pulse_guard.db"  # SQLite
-# url = "postgresql://user:password@localhost/pulse_guard"  # PostgreSQL
+# url = "sqlite:///./backend.db"  # SQLite
 url = "mysql+pymysql://root:123456@localhost:3306/pulse_guard"
 echo = false  # 是否显示 SQL 语句
