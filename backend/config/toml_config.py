@@ -79,6 +79,23 @@ class GiteeConfig(BaseModel):
     )
 
 
+class GiteaConfig(BaseModel):
+    """Gitea 配置"""
+
+    api_base_url: str = Field(
+        default=_toml_config.get("gitea", {}).get(
+            "api_base_url", "http://192.168.110.46:3000/api/v1"
+        ),
+        description="Gitea API 基础 URL",
+    )
+    access_token: str = Field(
+        default=os.getenv("GITEA_ACCESS_TOKEN", ""), description="Gitea API 访问令牌"
+    )
+    webhook_secret: str = Field(
+        default=os.getenv("GITEA_WEBHOOK_SECRET", ""), description="Gitea Webhook 密钥"
+    )
+
+
 class RedisConfig(BaseModel):
     """Redis 配置"""
 
@@ -109,6 +126,7 @@ class TomlConfig(BaseModel):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     github: GitHubConfig = Field(default_factory=GitHubConfig)
     gitee: GiteeConfig = Field(default_factory=GiteeConfig)
+    gitea: GiteaConfig = Field(default_factory=GiteaConfig)
     redis: RedisConfig = Field(default_factory=RedisConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
 

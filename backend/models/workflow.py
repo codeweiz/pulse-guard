@@ -73,7 +73,7 @@ class FileInfo(BaseModel):
     additions: int = Field(default=0, description="新增行数")
     deletions: int = Field(default=0, description="删除行数")
     changes: int = Field(default=0, description="总变更行数")
-    patch: str = Field(default="", description="补丁内容")
+    patch: Optional[str] = Field(default="", description="补丁内容")
     content: str = Field(default="", description="文件内容")
 
     @field_validator("additions", "deletions", mode="before")

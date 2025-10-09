@@ -1,11 +1,12 @@
-.PHONY: install dev clean lint test run-backend run-frontend worker docker-build docker-up docker-down
+.PHONY: install install-dev clean lint test run-backend run-frontend run-worker docker-build docker-up docker-down
 
 # 安装依赖
 install:
 	uv sync
 
 # 安装开发依赖
-dev:
+install-dev:
+	uv sync
 	uv sync --extra dev
 
 # 清理项目
@@ -41,10 +42,10 @@ run-backend:
 
 # 运行前端
 run-frontend:
-	uv run python -m frontend.app
+	NO_PROXY=* no_proxy=* HTTP_PROXY="" HTTPS_PROXY="" http_proxy="" https_proxy="" uv run python -m frontend.app
 
 # 运行 Celery Worker
-worker:
+run-worker:
 	uv run celery -A backend.worker.celery_app worker --loglevel=info
 
 # Docker 相关命令

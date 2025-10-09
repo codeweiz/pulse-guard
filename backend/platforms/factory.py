@@ -29,7 +29,7 @@ class PlatformFactory:
         """注册平台提供者类
 
         Args:
-            platform_name: 平台名称，如 "github", "gitee"
+            platform_name: 平台名称，如 "github", "gitee", "gitea"
             provider_class: 平台提供者类
         """
         cls._providers[platform_name.lower()] = provider_class

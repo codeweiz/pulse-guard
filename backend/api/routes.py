@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request
 from backend.api.analytics import router as analytics_router
 from backend.api.gitee_webhook import handle_webhook as handle_gitee_webhook
 from backend.api.github_webhook import handle_webhook as handle_github_webhook
+from backend.api.gitea_webhook import handle_webhook as handle_gitea_webhook
 from backend.worker.tasks import process_pull_request
 
 # 创建路由器
@@ -26,6 +27,12 @@ async def github_webhook(request: Request):
 async def gitee_webhook(request: Request):
     """Gitee Webhook 端点"""
     return await handle_gitee_webhook(request)
+
+
+@router.post("/webhook/gitea")
+async def gitea_webhook(request: Request):
+    """Gitea Webhook 端点"""
+    return await handle_gitea_webhook(request)
 
 
 @router.post("/review")
