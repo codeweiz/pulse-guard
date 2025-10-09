@@ -23,6 +23,8 @@ class PRReviewApp:
 
     def __init__(self):
         self.current_repo = None
+        # API基础URL，可以从环境变量读取
+        self.api_base_url = os.getenv("API_BASE_URL", "http://localhost:8000")
 
     def get_pr_reviews(self, repo_name: str = "", limit: int = 50) -> pd.DataFrame:
         """获取PR审查记录列表"""
@@ -48,36 +50,43 @@ class PRReviewApp:
                         "标题",
                         "作者",
                         "平台",
-                        "总体评分",
-                        "代码质量",
-                        "安全性",
-                        "业务逻辑",
-                        "总问题数",
+                        "文件数",
+                        "代码变更",
                         "严重问题",
+                        "总问题数",
+                        "问题密度",
+                        "总体评分",
                         "创建时间",
                     ]
                 )
 
             data = []
             for review in reviews:
+                # 计算问题密度 (问题数/每100行代码)
+                total_lines = review.total_lines_changed if review.total_lines_changed > 0 else 1
+                issue_density = (review.total_issues / total_lines) * 100 if total_lines > 0 else 0
+
+                # 格式化代码变更
+                code_changes = f"+{review.total_lines_added}/-{review.total_lines_deleted}"
+
                 data.append(
                     {
                         "ID": review.id,
                         "仓库": review.repo_full_name,
                         "PR编号": review.pr_number,
                         "标题": (
-                            review.pr_title[:50] + "..."
-                            if len(review.pr_title) > 50
+                            review.pr_title[:40] + "..."
+                            if len(review.pr_title) > 40
                             else review.pr_title
                         ),
                         "作者": review.pr_author,
                         "平台": review.platform,
-                        "总体评分": f"{review.overall_score:.1f}",
-                        "代码质量": f"{review.code_quality_score:.1f}",
-                        "安全性": f"{review.security_score:.1f}",
-                        "业务逻辑": f"{review.business_score:.1f}",
-                        "总问题数": review.total_issues,
+                        "文件数": review.total_files,
+                        "代码变更": code_changes,
                         "严重问题": review.critical_issues,
+                        "总问题数": review.total_issues,
+                        "问题密度": f"{issue_density:.2f} %",
+                        "总体评分": f"{review.overall_score:.1f}",
                         "创建时间": review.created_at.strftime("%Y-%m-%d %H:%M"),
                     }
                 )
@@ -107,6 +116,10 @@ class PRReviewApp:
             if not pr_review:
                 return "未找到指定的PR审查记录", pd.DataFrame(), pd.DataFrame()
 
+            # 计算问题密度
+            total_lines = pr_review.total_lines_changed if pr_review.total_lines_changed > 0 else 1
+            issue_density = (pr_review.total_issues / total_lines) * 100 if total_lines > 0 else 0
+
             # 构建基本信息
             basic_info = f"""
 # PR审查详情
@@ -118,6 +131,12 @@ class PRReviewApp:
 **平台**: {pr_review.platform}
 **审查时间**: {pr_review.created_at.strftime("%Y-%m-%d %H:%M:%S")}
 
+## 代码变更统计
+- **涉及文件**: {pr_review.total_files} 个
+- **新增代码**: +{pr_review.total_lines_added} 行
+- **删除代码**: -{pr_review.total_lines_deleted} 行
+- **总变更量**: {pr_review.total_lines_changed} 行
+
 ## 评分概览
 - **总体评分**: {pr_review.overall_score:.1f}/100
 - **代码质量**: {pr_review.code_quality_score:.1f}/100
@@ -126,6 +145,7 @@ class PRReviewApp:
 
 ## 问题统计
 - **总问题数**: {pr_review.total_issues}
+- **问题密度**: {issue_density:.2f} 问题/100行代码
 - **严重问题**: {pr_review.critical_issues}
 - **错误**: {pr_review.error_issues}
 - **警告**: {pr_review.warning_issues}
@@ -148,12 +168,13 @@ class PRReviewApp:
                 file_data.append(
                     {
                         "文件名": file_review.filename,
+                        "代码变更": f"+{file_review.lines_added}/-{file_review.lines_deleted}",
                         "评分": f"{file_review.score:.1f}",
                         "问题数": file_review.issues_count,
                         "影响级别": file_review.impact_level,
                         "摘要": (
-                            file_review.summary[:200] + "..."
-                            if len(file_review.summary) > 200
+                            file_review.summary[:150] + "..."
+                            if len(file_review.summary) > 150
                             else file_review.summary
                         ),
                     }
@@ -163,7 +184,7 @@ class PRReviewApp:
                 pd.DataFrame(file_data)
                 if file_data
                 else pd.DataFrame(
-                    columns=["文件名", "评分", "问题数", "影响级别", "摘要"]
+                    columns=["文件名", "代码变更", "评分", "问题数", "影响级别", "摘要"]
                 )
             )
 
