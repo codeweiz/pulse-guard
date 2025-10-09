@@ -41,11 +41,26 @@ class CommentService:
         """保存审查结果到数据库"""
         try:
             from backend.database import DatabaseManager
-            
+
             pr_info = state.pr_info
             file_reviews = state.file_reviews
             enhanced_analysis = state.enhanced_analysis
-            
+
+            # 从 state.files 中提取文件信息（包含行数统计）
+            files_info = []
+            for file in state.files:
+                if isinstance(file, dict):
+                    files_info.append(file)
+                else:
+                    # 如果是 FileInfo 对象，转换为字典
+                    files_info.append({
+                        "filename": file.filename,
+                        "additions": file.additions,
+                        "deletions": file.deletions,
+                        "changes": file.changes,
+                        "status": file.status,
+                    })
+
             db_record_id = DatabaseManager.save_complete_review_result(
                 repo_full_name=pr_info.repo_full_name,
                 pr_number=pr_info.number,
@@ -56,10 +71,11 @@ class CommentService:
                 review_result={
                     "enhanced_analysis": enhanced_analysis.model_dump() if enhanced_analysis else None,
                     "file_reviews": [
-                        fr.model_dump() if isinstance(fr, FileReviewInfo) else fr 
+                        fr.model_dump() if isinstance(fr, FileReviewInfo) else fr
                         for fr in file_reviews
                     ],
                 },
+                files_info=files_info,  # 传递文件信息
             )
             
             self.logger.info(f"审查结果已保存到数据库，记录ID: {db_record_id}")

@@ -52,7 +52,13 @@ class PRReviewRecord(Base):
     pr_title = Column(String(500))
     pr_description = Column(Text)
     pr_author = Column(String(100))
-    platform = Column(String(20), default="github")  # github, gitee
+    platform = Column(String(20), default="github")  # github, gitee, gitea
+
+    # 代码行数统计
+    total_files = Column(Integer, default=0)  # 涉及文件总数
+    total_lines_added = Column(Integer, default=0)  # 新增代码行数
+    total_lines_deleted = Column(Integer, default=0)  # 删除代码行数
+    total_lines_changed = Column(Integer, default=0)  # 总变更行数
 
     # 审查结果
     overall_score = Column(Float, default=0.0)  # 总体评分 0-100
@@ -345,6 +351,7 @@ class DatabaseManager:
             pr_author: str,
             platform: str,
             review_result: Dict[str, Any],
+            files_info: List[Dict[str, Any]] = None,
     ) -> int:
         """保存完整的审查结果到数据库
 
@@ -356,6 +363,7 @@ class DatabaseManager:
             pr_author: PR作者
             platform: 平台名称
             review_result: 审查结果字典，包含enhanced_analysis和file_reviews
+            files_info: 文件信息列表，包含每个文件的additions/deletions/changes
 
         Returns:
             PR审查记录的ID
@@ -366,6 +374,18 @@ class DatabaseManager:
             enhanced_analysis = review_result.get("enhanced_analysis", {})
             file_reviews = review_result.get("file_reviews", [])
 
+            # 计算代码行数统计
+            total_files = len(files_info) if files_info else 0
+            total_lines_added = 0
+            total_lines_deleted = 0
+            total_lines_changed = 0
+
+            if files_info:
+                for file_info in files_info:
+                    total_lines_added += file_info.get("additions", 0)
+                    total_lines_deleted += file_info.get("deletions", 0)
+                    total_lines_changed += file_info.get("changes", 0)
+
             # 创建PR审查记录
             pr_review = PRReviewRecord(
                 repo_full_name=repo_full_name,
@@ -374,6 +394,12 @@ class DatabaseManager:
                 pr_description=pr_description,
                 pr_author=pr_author,
                 platform=platform,
+                # 代码行数统计
+                total_files=total_files,
+                total_lines_added=total_lines_added,
+                total_lines_deleted=total_lines_deleted,
+                total_lines_changed=total_lines_changed,
+                # 审查评分
                 overall_score=enhanced_analysis.get("overall_score", 0.0),
                 business_score=enhanced_analysis.get("business_score", 0.0),
                 code_quality_score=enhanced_analysis.get("code_quality_score", 0.0),
@@ -417,13 +443,25 @@ class DatabaseManager:
 
             # 保存文件审查记录
             for file_review in file_reviews:
+                # 查找对应的文件信息
+                file_info = None
+                if files_info:
+                    for fi in files_info:
+                        if fi.get("filename") == file_review.get("filename"):
+                            file_info = fi
+                            break
+
                 file_record = FileReviewRecord(
                     pr_review_id=pr_review.id,
                     filename=file_review.get("filename", ""),
                     score=file_review.get("score", 0.0),
                     summary=file_review.get("summary", ""),
                     issues_count=len(file_review.get("issues", [])),
-                    change_type="modified",  # 默认值，可以后续优化
+                    # 添加文件行数统计
+                    lines_added=file_info.get("additions", 0) if file_info else 0,
+                    lines_deleted=file_info.get("deletions", 0) if file_info else 0,
+                    lines_changed=file_info.get("changes", 0) if file_info else 0,
+                    change_type=file_info.get("status", "modified") if file_info else "modified",
                     impact_level="medium",  # 默认值，可以后续优化
                 )
                 db.add(file_record)
